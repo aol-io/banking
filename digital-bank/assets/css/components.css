@@ -32,6 +32,23 @@
      they render the exact same .chat-attachment-image class, so
      this one rule fixes both sides at once.
 
+   - Mobile chat panel (section 9): .chat-panel used to be sized
+     with `height: calc(100vh - 7rem)` while staying anchored via
+     .chat-widget's `position: fixed; bottom/right`. 100vh is based
+     on the LAYOUT viewport, which does not shrink when the mobile
+     keyboard opens — so as soon as the input was focused, the
+     panel's box no longer matched the real visible area, and the
+     browser's own "scroll the focused input into view" behavior
+     inside a fixed-position ancestor made the whole page jump/
+     misalign. The panel is now a true full-screen sheet on mobile
+     (`inset: 0`, `100dvh` with a `100vh` fallback for browsers that
+     don't support dvh), with safe-area padding on the header/input
+     row and no leftover page underneath for the keyboard to fight
+     with. Paired with `body.chat-panel-open { overflow: hidden }`,
+     toggled from chat-widget.js's openPanel()/closePanel(), which
+     stops the page behind the panel from scrolling at all while
+     it's open.
+
    Contents:
      1.  Back-to-top button
      2.  Chat support widget
@@ -864,6 +881,15 @@
   background: rgba(10, 22, 40, 0.08);
 }
 
+/* Toggled on <body> from chat-widget.js's openPanel()/closePanel()
+   while the full-screen mobile panel (see section 9) is open, so
+   the page behind it can't scroll and fight with the on-screen
+   keyboard for the visible viewport. No-op above the 480px
+   breakpoint since the panel is never full-screen there. */
+body.chat-panel-open {
+  overflow: hidden;
+}
+
 /* -------------------------------------------------------------
    3. Site-wide accessibility states, toggled from the chat menu
    ------------------------------------------------------------- */
@@ -1229,16 +1255,43 @@ html.a11y-reduce-motion *::after {
 
 /* -------------------------------------------------------------
    9. Responsive
+   -----------------------------------------------------------
+   .chat-panel becomes a true full-screen sheet below 480px —
+   see FIX LOG at the top of this file for why 100vh + fixed
+   anchoring used to break when the mobile keyboard opened.
    ------------------------------------------------------------- */
 @media (max-width: 480px) {
   .chat-widget {
     right: 1rem;
     bottom: 1rem;
   }
+
   .chat-panel {
-    width: calc(100vw - 2rem);
-    height: calc(100vh - 7rem);
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;   /* fallback for browsers without dvh support */
+    height: 100dvh;  /* tracks the real visible viewport, keyboard included */
+    max-height: none;
+    border-radius: 0;
+    z-index: 1001;
+    transform: none;
+    transform-origin: center;
   }
+
+  .chat-widget.is-open .chat-panel {
+    transform: none;
+  }
+
+  .chat-panel-head {
+    padding-top: calc(1.1rem + env(safe-area-inset-top, 0px));
+  }
+
+  .chat-input-row {
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  }
+
   .back-to-top {
     display: none;
   }
