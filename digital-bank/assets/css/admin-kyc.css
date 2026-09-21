@@ -330,6 +330,28 @@
   display: none;
 }
 
+/* Confirm-the-details fields (verify only) */
+.kyc-modal-fields {
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.kyc-modal-fields[hidden] {
+  display: none;
+}
+
+.kyc-modal-fields legend {
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.kyc-modal-fields .kyc-hint {
+  margin: 0.25rem 0 0.9rem;
+}
+
 /* -----------------------------------------------------------
    Small screens
    ----------------------------------------------------------- */
