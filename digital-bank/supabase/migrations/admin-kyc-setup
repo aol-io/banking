@@ -1,0 +1,36 @@
+-- =============================================================
+-- MERIDIAN — setup for the document-based KYC page
+-- Run in the Supabase SQL editor. Safe to re-run.
+--
+-- Before running, replace is_staff() below with whatever helper
+-- admin_schema.sql already uses to mean "support, admin or
+-- superadmin". Reading is open to all staff; deciding is not —
+-- admin_review_identity_document() must check admin/superadmin
+-- only, so support can look but not decide (the page hides the
+-- buttons for support too, but the function is the real gate).
+-- =============================================================
+
+-- 1. Columns the page reads or the review function writes.
+--    No-ops if they already exist.
+alter table identity_documents add column if not exists rejection_reason text;
+alter table identity_documents add column if not exists reviewed_at timestamptz;
+alter table identity_documents add column if not exists created_at timestamptz not null default now();
+
+-- 2. Staff can read every submission (the queue and the drawer).
+drop policy if exists "staff read identity documents" on identity_documents;
+create policy "staff read identity documents"
+  on identity_documents
+  for select to authenticated
+  using (is_staff());   -- ← replace with your helper
+
+-- 3. Staff can create signed URLs for files in the private bucket.
+drop policy if exists "staff read identity files" on storage.objects;
+create policy "staff read identity files"
+  on storage.objects
+  for select to authenticated
+  using (bucket_id = 'identity-documents' and is_staff());   -- ← replace with your helper
+
+-- 4. Check: should list both policies.
+select schemaname, tablename, policyname
+from pg_policies
+where policyname in ('staff read identity documents', 'staff read identity files');
