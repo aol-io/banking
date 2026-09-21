@@ -1253,8 +1253,8 @@
    .linked-id-fields dl (verified document detail).
    ------------------------------------------------------------- */
 .linked-id-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
   margin-top: 1.5rem;
 }
@@ -1706,10 +1706,6 @@
 
   .settings-row-value {
     display: none;
-  }
-
-  .linked-id-grid {
-    grid-template-columns: 1fr;
   }
 
   .form-row-2,
