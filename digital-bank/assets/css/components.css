@@ -1269,15 +1269,18 @@ html.a11y-reduce-motion *::after {
   .chat-panel {
     position: fixed;
     inset: 0;
+    box-sizing: border-box; /* border below is now INCLUDED in that 100% width, not added on top of it */
     width: 100%;
     max-width: 100%;
     height: 100vh;   /* fallback for browsers without dvh support */
     height: 100dvh;  /* tracks the real visible viewport, keyboard included */
     max-height: none;
+    border: none;    /* a full-screen sheet has no edge to outline; also removes the +2px that caused horizontal overflow */
     border-radius: 0;
     z-index: 1001;
     transform: none;
     transform-origin: center;
+    overflow-x: hidden;
   }
 
   .chat-widget.is-open .chat-panel {
@@ -1292,6 +1295,16 @@ html.a11y-reduce-motion *::after {
     padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
   }
 
+  /* iOS Safari zooms the whole page in when a focused input's
+     font-size is under 16px, which is what actually produced the
+     "horizontal margin expanding past phone width" — the page
+     itself doesn't get wider, Safari zooms into it, and the zoomed
+     viewport reveals content that was always slightly wider than
+     the screen. 16px sidesteps the auto-zoom entirely. */
+  .chat-input-row textarea {
+    font-size: 16px;
+  }
+
   .back-to-top {
     display: none;
   }
@@ -1302,4 +1315,26 @@ html.a11y-reduce-motion *::after {
     left: 1rem;
     width: auto;
   }
+}
+
+/* -------------------------------------------------------------
+   iOS-proof background scroll lock
+   -----------------------------------------------------------
+   `overflow: hidden` on <body> (declared earlier, in section 2)
+   is NOT respected by iOS Safari for touch scrolling — the page
+   behind a fixed-position panel can still be dragged, which is
+   the "still seeing the scrollbar / it still scrolls" symptom.
+   The reliable fix is pinning <body> itself with position:fixed
+   while the panel is open. chat-widget.js applies BOTH classes
+   together (chat-panel-open handles non-iOS browsers that DO
+   respect overflow:hidden; chat-panel-locked adds the iOS-proof
+   pin) and restores the saved scroll offset via
+   `top: -${scrollY}px` so the page doesn't jump when it unlocks.
+   ------------------------------------------------------------- */
+body.chat-panel-locked {
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: 100%;
+  overflow: hidden;
 }
