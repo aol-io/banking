@@ -137,6 +137,36 @@
 
       <p class="kyc-effect" id="decision-modal-effect"></p>
 
+      <!-- Verify only, BVN and identity documents. Prefilled from what the
+           applicant entered; whatever is here is saved on the verified record. -->
+      <fieldset class="kyc-modal-fields" id="decision-details" hidden>
+        <legend>Confirm the details</legend>
+        <p class="kyc-hint">Correct anything that differs from the document. These values are saved with the verification.</p>
+        <div class="field">
+          <label for="decision-full-name">Full name</label>
+          <input type="text" id="decision-full-name" autocomplete="off">
+        </div>
+        <div class="form-row-2">
+          <div class="field">
+            <label for="decision-id-number">ID number</label>
+            <input type="text" id="decision-id-number" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="decision-dob">Date of birth</label>
+            <input type="date" id="decision-dob">
+          </div>
+        </div>
+        <div class="field">
+          <label for="decision-gender">Gender</label>
+          <select id="decision-gender">
+            <option value="">Not stated</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="nonbinary">Non-binary</option>
+          </select>
+        </div>
+      </fieldset>
+
       <div class="field" id="decision-reason-field">
         <label for="decision-modal-reason" id="decision-reason-label">Reason</label>
         <textarea id="decision-modal-reason" rows="3"></textarea>
