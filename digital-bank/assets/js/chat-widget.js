@@ -31,6 +31,16 @@
      wired for real: sound plays on real incoming messages, transcript
      downloads the real thread, clear conversation closes the real
      thread via closeMyThread().
+   - MOBILE FIX: openPanel()/closePanel() now toggle a
+     `chat-panel-open` class on <body>. Below the 480px breakpoint,
+     components.css turns .chat-panel into a full-screen sheet
+     (inset:0, 100dvh) instead of a fixed-size box anchored to a
+     corner — that fixed-size-plus-100vh combination broke as soon
+     as the mobile keyboard opened, because 100vh doesn't shrink
+     with the visual viewport. `chat-panel-open` sets
+     `overflow: hidden` on <body> so the page behind the full-screen
+     panel can't also scroll while the keyboard is up, which was the
+     other half of the "disorganised" jump on input focus.
 
    BOOTING
    -------
@@ -74,6 +84,8 @@ import { formatTimestamp } from './utils.js';
 
 const SESSION_KEY = 'meridian-chat-open';
 const HEARTBEAT_INTERVAL_MS = 30000;
+/** <body> class toggled while the panel is open — see FIX note above and components.css. */
+const BODY_OPEN_CLASS = 'chat-panel-open';
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let state = {
@@ -293,6 +305,10 @@ async function openPanel() {
   launcher.setAttribute('aria-expanded', 'true');
   launcher.setAttribute('aria-label', 'Close chat support');
   state.panelOpen = true;
+  // Locks background scroll while the full-screen mobile panel is
+  // open (components.css: body.chat-panel-open { overflow: hidden }).
+  // No-op above the 480px breakpoint, where the panel isn't full-screen.
+  document.body.classList.add(BODY_OPEN_CLASS);
   sessionStorage.setItem(SESSION_KEY, '1');
 
   if (!state.threadId) {
@@ -318,6 +334,7 @@ function closePanel() {
   launcher.setAttribute('aria-expanded', 'false');
   launcher.setAttribute('aria-label', 'Open chat support');
   state.panelOpen = false;
+  document.body.classList.remove(BODY_OPEN_CLASS);
   sessionStorage.removeItem(SESSION_KEY);
   closeMenu();
   stopHeartbeat();
@@ -677,6 +694,7 @@ export function unmountChatWidget() {
   unsubscribeFromThread(state.channel);
   stopHeartbeat();
   clearPendingFile();
+  document.body.classList.remove(BODY_OPEN_CLASS);
   state = {
     threadId: null, channel: null, panelOpen: false, mounted: false, allowGuest: false,
     pendingFile: null, previewObjectUrl: null, soundEnabled: true, audioCtx: null,
