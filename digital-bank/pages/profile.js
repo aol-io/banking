@@ -9,78 +9,77 @@
      5. Security > Password, Two-factor (display only), Sessions
      6. Account & security > Login settings (password, forgot
         password, session preference, Face ID — status only)
-     7. Account & security > Account limits (info, Linked ID,
-        accepted docs, document upload)
+     7. Account & security > Account limits (info, tier badges,
+        Linked ID, accepted docs, VERIFICATION FLOW — see 7b)
      8. Danger zone (no backend yet — honest placeholders)
      9. Avatar upload
+
+   -----------------------------------------------------------
+   WHAT CHANGED IN THIS REVISION — sequential KYC verification
+   -----------------------------------------------------------
+   The old "Upload documents" form (one dropdown with all 12
+   document types, always available) is replaced by a stepper
+   rendered into #kyc-flow (created automatically inside
+   #screen-limits-upload if profile.html doesn't have it yet; the
+   legacy form card is hidden, not deleted). Rules it enforces:
+
+     - Tiers are applied for in order: 1 = BVN, 2 = identity
+       document, 3 = proof of address. Only the NEXT step is ever
+       shown as a form; later steps stay hidden until the previous
+       one is verified. Verified steps collapse into a compact row.
+     - A step with a pending submission cannot be submitted again.
+       It shows "Application submitted — under review" instead.
+     - A step whose latest submission was rejected (or sent back
+       with "action required") shows the admin's reason and
+       re-opens the form, prefilled, as a resubmission.
+     - ID numbers are validated per document type (BVN and NIN are
+       exactly 11 digits; the other three use a length/charset
+       range — see ID_RULES). Input is sanitised as you type.
+     - Tier badges everywhere on the page now show the real
+       user_profiles.account_tier.
+     - Decisions arrive live: this page listens for new rows in
+       `notifications` (same table/realtime feed the header bell
+       uses) and re-reads the profile + submissions when one lands,
+       so the status flips from "under review" without a reload.
+       The notification rows themselves are created SERVER-SIDE
+       when an admin decides — see the SQL delivered with this file.
+
+   These client-side checks are a convenience, not the security
+   boundary: the "one open application per step" rule must also be
+   enforced in the database (partial unique index) — see the SQL.
 
    -----------------------------------------------------------
    KNOWN GAPS / ASSUMPTIONS — flagged rather than silently
    guessed, per the files actually available at the time this
    was written:
 
+   - getMyIdentityDocumentHistory() (supabase/database.js) must
+     select/order by `submitted_at`, NOT `created_at` —
+     identity_documents has no created_at column, so the query
+     errors and the verification flow shows its error state.
    - AVATAR FIELD MISMATCH: storage.js's uploadAvatar() writes
      user_profiles.profile_photo, but auth-ui.js reads
-     user_profiles.avatar_url. These look like two different
-     column names for the same thing. This file reads whichever
-     is present (avatar_url first, profile_photo as fallback) so
-     the photo shows up either way, but the underlying mismatch
-     should be fixed in the schema/storage.js — right now a
-     photo uploaded here may not be picked up by auth-ui.js's
-     header rendering (or vice versa) depending on which column
-     actually exists.
-   - SESSIONS: database.js has no exported "list my sessions"
-     function. fetchLoginSessions() below queries the
-     login_sessions table directly (the same table auth.js
-     already reads/writes), assuming an owner-scoped SELECT RLS
-     policy exists. If it doesn't yet, this section will just
-     show "no sessions on record" rather than break the page.
-   - ACTIVITY LIST: no exported getter exists for audit_logs (or
-     any activity feed) in database.js, so the Overview activity
-     list honestly says it isn't wired up yet instead of spinning
-     forever or fabricating entries.
-   - NOTIFICATION PREFERENCES: still no known user_profiles
-     column for these, so the toggles remain UI feedback only
-     (not persisted server-side) and say so in their toast text.
-     (Login session preference — previously flagged the same way
-     — is now backed by user_profiles.login_session_preference
-     per migration 016 PART D and is persisted for real below.
-     Per that migration's own honesty note, the column records
-     stated intent only; it doesn't yet shorten or lengthen any
-     actual Supabase session.)
-   - ACCOUNT TIER: backed by user_profiles.account_tier
-     (migration 016 PART A — admin-write-only via a DB trigger).
-     Tier badges render the real value; this file never attempts
-     to write it.
+     user_profiles.avatar_url. This file reads whichever is
+     present (avatar_url first, profile_photo as fallback).
+   - SESSIONS: no exported "list my sessions" function exists in
+     database.js, so fetchLoginSessions() queries login_sessions
+     directly (assumes an owner-scoped SELECT policy).
+   - ACTIVITY LIST: no exported getter for audit_logs exists, so
+     the Overview activity list says it isn't wired up yet.
+   - NOTIFICATION PREFERENCES: no known user_profiles column, so
+     the toggles are UI feedback only. (Login session preference
+     is the same: it records stated intent only.)
+   - ACCOUNT TIER: user_profiles.account_tier is admin-write-only
+     (DB trigger). Displayed verbatim; this file never writes it.
    - ACCOUNT NUMBER: user_profiles.account_number (migration 016
-     PART B) is the single, stable, server-generated customer
-     number shown on Account information — distinct from each
-     currency account's own account_number/iban on the `accounts`
-     table. The reveal toggle reads the former, not a currency
-     account's number.
-   - DANGER ZONE (data export / close account): no backend
-     functions exist yet, so both buttons show an honest "not
-     available yet — contact support" message instead of doing
-     nothing silently or faking success.
-   - AVATAR FILE INPUT: profile.html's .profile-avatar-edit
-     button has no associated <input type="file">. One is
-     created here in JS rather than editing that markup.
-   - FACE ID: per instruction, left for later. This file only
-     reads and displays real state (via getMyWebauthnCredentials
-     — a credential existing means "enabled") and disables the
-     enable/disable button with a "Coming soon" label. It does
-     NOT attempt navigator.credentials.create()/get() or any
-     enrollment/login flow.
+     PART B) is the single customer number on Account information.
+   - DANGER ZONE: no backend functions yet — honest placeholders.
+   - FACE ID: status display only ("Coming soon").
 
-   I18N WIRING (new) -------------------------------------------
-   assets/js/translation.js exposes window.MeridianI18n with
-   t(key), getLanguage(), setLanguage(code, opts), and
-   applyTranslations() — confirmed against that file directly.
-   Every user-facing string generated in this file (toasts,
-   status pills, tier badges, session/date text) now goes
-   through the small t() wrapper below instead of a hardcoded
-   English literal, so a language switch mid-session is picked
-   up without a reload for anything this file renders.
+   I18N: every user-facing string goes through t(). New strings in
+   the verification flow go through tr(key, englishFallback) so
+   they render in English until the keys are added to
+   assets/js/translation.js.
    ============================================================= */
 
 import { getCurrentUser, updateUserPassword, verifyCurrentPassword, requestPasswordReset } from '../supabase/auth.js';
@@ -89,6 +88,7 @@ import {
   getMyAccounts,
   getCardsForAccount,
   getMyIdentityDocuments,
+  getMyIdentityDocumentHistory,
   getMyWebauthnCredentials,
   submitIdentityDocument,
 } from '../supabase/database.js';
@@ -102,6 +102,22 @@ function t(key) {
   return (window.MeridianI18n && typeof window.MeridianI18n.t === 'function')
     ? window.MeridianI18n.t(key)
     : key;
+}
+
+/**
+ * t() with an English fallback and {placeholder} substitution.
+ * If the key isn't in translation.js yet (t() hands the key back),
+ * the fallback is used, so new UI never shows a raw key.
+ */
+function tr(key, fallback, vars) {
+  let out = t(key);
+  if (!out || out === key) out = fallback;
+  if (vars) {
+    Object.entries(vars).forEach(([name, value]) => {
+      out = out.split(`{${name}}`).join(String(value));
+    });
+  }
+  return out;
 }
 
 // Same BCP-47 map used by settings.js, kept local here so this
@@ -138,7 +154,14 @@ function getInitials(name) {
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function formatDate(value, withTime = false) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(currentLocale(), withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' });
 }
 
 /** Mirrors auth-ui.js's renderAvatar() locally — that function isn't exported, so this page owns its own copy for the elements it controls. */
@@ -265,7 +288,7 @@ function wirePasswordToggles() {
 }
 
 /* -----------------------------------------------------------
-   3. Profile banner + Personal info
+   3. Profile banner + Personal info + tier badges
    ----------------------------------------------------------- */
 function populateBanner(user, profile) {
   const h1 = document.querySelector('.profile-banner-identity h1');
@@ -329,13 +352,32 @@ function populateAccountInfo(profile) {
   }
 }
 
-function wireAccountNumberToggle(accounts) {
+/** The user's real tier (user_profiles.account_tier). Falls back to 1 — the value the markup ships with — if the column is empty. */
+function resolveTier() {
+  const n = Number(currentProfile?.account_tier);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
+}
+
+function renderTierBadges() {
+  const tier = resolveTier();
+  const label = tr('profile.tier.label', 'Tier {n}', { n: tier });
+  ['account-security-tier-preview', 'account-info-tier-preview', 'account-tier-badge'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = label;
+    el.setAttribute('data-tier', String(tier));
+  });
+}
+
+function wireAccountNumberToggle(profile, accounts) {
   const valueEl = document.getElementById('account-number-value');
   const toggleBtn = document.getElementById('account-number-toggle');
   if (!valueEl || !toggleBtn) return;
 
+  // user_profiles.account_number is the customer number (migration 016
+  // PART B); a currency account's own number is only a fallback.
   const primary = accounts?.[0];
-  const full = primary?.account_number || primary?.iban || null;
+  const full = profile?.account_number || primary?.account_number || primary?.iban || null;
 
   if (!full) {
     valueEl.textContent = t('profile.limits_info.no_account');
@@ -367,9 +409,12 @@ function populateActivityPlaceholder() {
     </li>`;
 }
 
+function overviewValueEls() {
+  return $$('.profile-summary-card .profile-summary-value');
+}
+
 async function loadOverviewSummary(userId, accounts) {
-  const cards = $$('.profile-summary-card .profile-summary-value');
-  const [accountStatusEl, linkedEl, cardsEl, sessionsEl] = cards;
+  const [accountStatusEl, linkedEl, cardsEl, sessionsEl] = overviewValueEls();
 
   if (accountStatusEl) accountStatusEl.textContent = currentProfile?.account_status || '—';
 
@@ -385,6 +430,15 @@ async function loadOverviewSummary(userId, accounts) {
 
   const { data: sessions } = await fetchLoginSessions(userId);
   if (sessionsEl) sessionsEl.textContent = String((sessions || []).filter((s) => !s.logout_time).length);
+}
+
+/** Lightweight refresh used when a KYC decision lands — avoids re-walking every card. */
+async function refreshOverviewAfterDecision() {
+  const [accountStatusEl, linkedEl] = overviewValueEls();
+  if (accountStatusEl) accountStatusEl.textContent = currentProfile?.account_status || '—';
+  if (!currentUser) return;
+  const { data: idDocs } = await getMyIdentityDocuments(currentUser.id);
+  if (linkedEl) linkedEl.textContent = `${idDocs?.length || 0} / 3`;
 }
 
 /* -----------------------------------------------------------
@@ -741,299 +795,947 @@ async function renderLinkedIdCards() {
   });
 }
 
+
+
 /* -----------------------------------------------------------
-   7b. Document upload
+   7b. Identity verification (KYC) — sequential tiers
+   -----------------------------------------------------------
+   Data comes from getMyIdentityDocumentHistory(): EVERY submission
+   with its status, so pending / rejected documents are visible.
+   A step's state is derived from the documents in its category:
+
+     verified          any document in the category is verified
+     pending           otherwise, any document is pending
+     rejected          otherwise, the newest document was rejected
+     action_required   otherwise, the newest was sent back for changes
+     available         no submission yet
+
+   Statuses only ever change through the admin review RPC — this
+   file never writes status, slot, tier or account status.
    ----------------------------------------------------------- */
-const IDENTITY_CATEGORY_BY_TYPE = {
-  bvn: 'bvn',
-  nin: 'identity',
-  drivers_license: 'identity',
-  passport: 'identity',
-  voters_card: 'identity',
-  electricity_bill: 'proof_of_address',
-  bank_statement: 'proof_of_address',
-  waste_bill: 'proof_of_address',
-  water_bill: 'proof_of_address',
-  house_rent_receipt: 'proof_of_address',
-  tenancy_agreement: 'proof_of_address',
-  land_use_charge: 'proof_of_address',
+
+const KYC_STEPS = [
+  {
+    key: 'bvn',
+    category: 'bvn',
+    tier: 1,
+    needsDetails: true,
+    needsFile: false,
+    types: ['bvn'],
+  },
+  {
+    key: 'identity',
+    category: 'identity',
+    tier: 2,
+    needsDetails: true,
+    needsFile: true,
+    types: ['nin', 'drivers_license', 'passport', 'voters_card'],
+  },
+  {
+    key: 'address',
+    category: 'proof_of_address',
+    tier: 3,
+    needsDetails: false,
+    needsFile: true,
+    types: ['electricity_bill', 'bank_statement', 'waste_bill', 'water_bill', 'house_rent_receipt', 'tenancy_agreement', 'land_use_charge'],
+  },
+];
+
+const DOC_LABEL_FALLBACKS = {
+  bvn: 'Bank Verification Number (BVN)',
+  nin: 'National Identification Number (NIN)',
+  drivers_license: "Driver's license",
+  passport: 'International passport',
+  voters_card: "Voter's card",
+  electricity_bill: 'Electricity bill',
+  bank_statement: 'Bank statement',
+  waste_bill: 'Waste bill',
+  water_bill: 'Water bill',
+  house_rent_receipt: 'House rent receipt',
+  tenancy_agreement: 'Tenancy agreement',
+  land_use_charge: 'Land Use Charge document',
 };
 
-function wireDocumentUpload() {
-  const form = document.getElementById('document-upload-form');
-  const typeSelect = document.getElementById('document-type-select');
-  const fileField = document.getElementById('document-upload-file-field');
-  const dropzone = document.getElementById('document-upload-dropzone');
-  const fileInput = document.getElementById('document-upload-input');
-  const preview = document.getElementById('document-upload-preview');
-  const previewName = document.getElementById('document-upload-preview-name');
-  const removeBtn = document.getElementById('document-upload-remove');
-  const progress = document.getElementById('document-upload-progress');
-  const progressBar = document.getElementById('document-upload-progress-bar');
-  const errorEl = document.getElementById('document-upload-error');
-  const statusPill = document.getElementById('document-upload-status');
-  const submitBtn = document.getElementById('document-upload-submit-btn');
-  const detailFields = document.getElementById('document-detail-fields');
-  const fullNameInput = document.getElementById('document-full-name');
-  const idNumberInput = document.getElementById('document-id-number');
-  const dobInput = document.getElementById('document-dob');
-  const genderInput = document.getElementById('document-gender');
-  if (!form || !dropzone || !fileInput) return;
+function docLabel(type) {
+  return tr(`profile.accepted_docs.${type}`, DOC_LABEL_FALLBACKS[type] || type || '—');
+}
 
-  let selectedFile = null;
+/**
+ * ID-number rules per document type.
+ *   BVN and NIN: exactly 11 digits (confirmed by CBN/NIBSS and NIMC).
+ *   Driver's license, passport, voter's card: issuer formats vary by
+ *   series, so these only enforce charset + a sensible length range
+ *   rather than risk rejecting a genuine number. Tighten min/max here
+ *   once you have your KYC provider's exact formats.
+ */
+const ID_RULES = {
+  bvn: {
+    label: 'BVN',
+    mode: 'digits',
+    min: 11,
+    max: 11,
+    hint: 'Your 11-digit Bank Verification Number. Dial *565*0# from your registered phone to retrieve it.',
+  },
+  nin: {
+    label: 'NIN',
+    mode: 'digits',
+    min: 11,
+    max: 11,
+    hint: 'Your 11-digit National Identification Number, shown on your NIN slip. Dial *346# to retrieve it.',
+  },
+  drivers_license: {
+    label: "Driver's license number",
+    mode: 'alnum',
+    min: 10,
+    max: 14,
+    hint: 'Usually 12 letters and numbers, exactly as printed on the card.',
+  },
+  passport: {
+    label: 'Passport number',
+    mode: 'alnum',
+    min: 8,
+    max: 10,
+    hint: 'Usually a letter followed by 8 digits, as printed on the data page.',
+  },
+  voters_card: {
+    label: 'Voter identification number (VIN)',
+    mode: 'alnum',
+    min: 9,
+    max: 20,
+    hint: "Letters and numbers, exactly as printed on your voter's card.",
+  },
+};
 
-  const currentCategory = () => IDENTITY_CATEGORY_BY_TYPE[typeSelect?.value] || null;
-  const requiresFileFor = (category) => category !== 'bvn';
-  const requiresDetailsFor = (category) => category === 'bvn' || category === 'identity';
+function idRule(type) {
+  const base = ID_RULES[type];
+  if (!base) return null;
+  return {
+    ...base,
+    label: tr(`profile.kyc.id_label.${type}`, base.label),
+    hint: tr(`profile.kyc.id_hint.${type}`, base.hint),
+  };
+}
 
-  function setSelectedFile(file) {
-    selectedFile = file || null;
-    if (selectedFile) {
-      if (previewName) previewName.textContent = selectedFile.name;
-      if (preview) preview.hidden = false;
+/** Strips anything the rule doesn't allow and caps the length — applied live as the user types. */
+function sanitizeIdInput(raw, rule) {
+  const value = String(raw || '');
+  const cleaned = rule.mode === 'digits' ? value.replace(/\D/g, '') : value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return cleaned.slice(0, rule.max);
+}
+
+function validateIdNumber(value, rule) {
+  const v = String(value || '');
+  const unit = rule.mode === 'digits' ? tr('profile.kyc.unit.digits', 'digits') : tr('profile.kyc.unit.characters', 'characters');
+
+  if (!v) return tr('profile.kyc.error.id_required', 'Enter your {label}.', { label: rule.label });
+
+  if (v.length < rule.min || v.length > rule.max) {
+    return rule.min === rule.max
+      ? tr('profile.kyc.error.id_exact', '{label} must be exactly {n} {unit}.', { label: rule.label, n: rule.min, unit })
+      : tr('profile.kyc.error.id_range', '{label} must be {min}–{max} {unit}.', { label: rule.label, min: rule.min, max: rule.max, unit });
+  }
+
+  const looksFake = rule.mode === 'digits' ? /^(\d)\1+$/.test(v) : !/\d/.test(v);
+  if (looksFake) return tr('profile.kyc.error.id_invalid', 'Enter your {label} exactly as it was issued to you.', { label: rule.label });
+
+  return '';
+}
+
+const NAME_PATTERN = /^[\p{L}][\p{L}\p{M}'’.\- ]*$/u;
+
+function validateFullName(value) {
+  const v = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!v) return tr('profile.kyc.error.name_required', 'Enter your full name.');
+  if (!NAME_PATTERN.test(v) || v.split(' ').filter(Boolean).length < 2) {
+    return tr('profile.kyc.error.name_invalid', 'Enter your first and last name exactly as on the document.');
+  }
+  return '';
+}
+
+function validateDob(value) {
+  if (!value) return tr('profile.kyc.error.dob_required', 'Enter your date of birth.');
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime()) || date > new Date() || date.getFullYear() < 1900) {
+    return tr('profile.kyc.error.dob_invalid', 'Enter a valid date of birth.');
+  }
+  return '';
+}
+
+const KYC_ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const KYC_MAX_FILE_BYTES = 10 * 1024 * 1024; // matches the identity-documents bucket limit
+
+function validateKycFile(file) {
+  if (!file) return tr('profile.kyc.error.file_required', 'Upload a copy of your document.');
+  if (!KYC_ALLOWED_FILE_TYPES.includes(file.type)) return tr('profile.kyc.error.file_type', 'Only PDF, JPG or PNG files are accepted.');
+  if (file.size > KYC_MAX_FILE_BYTES) return tr('profile.kyc.error.file_size', 'The file is larger than the 10MB limit.');
+  return '';
+}
+
+/* ----- State ----- */
+const kyc = {
+  docs: [],
+  loaded: false,
+  error: null,
+  submitting: false,
+  file: null,
+  signature: '',
+};
+
+let kycLoadToken = 0;
+
+const KYC_CONTROL_IDS = {
+  type: 'kyc-doc-type',
+  'id-number': 'kyc-id-number',
+  'full-name': 'kyc-full-name',
+  dob: 'kyc-dob',
+  gender: 'kyc-gender',
+  file: 'kyc-dropzone',
+};
+
+function kycSignature(docs) {
+  return (docs || []).map((d) => `${d.id}:${d.status}`).sort().join('|');
+}
+
+function computeKycSteps(docs) {
+  const sorted = [...(docs || [])].sort((a, b) => new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0));
+
+  return KYC_STEPS.map((step) => {
+    const inCategory = sorted.filter((d) => d.document_category === step.category);
+    const verified = inCategory.find((d) => d.status === 'verified');
+    const pending = inCategory.find((d) => d.status === 'pending');
+    const latest = inCategory[0] || null;
+
+    let status = 'available';
+    let doc = null;
+
+    if (verified) {
+      status = 'verified';
+      doc = verified;
+    } else if (pending) {
+      status = 'pending';
+      doc = pending;
+    } else if (latest && (latest.status === 'rejected' || latest.status === 'action_required')) {
+      status = latest.status;
+      doc = latest;
+    }
+
+    return { ...step, status, doc };
+  });
+}
+
+function kycHasPending() {
+  return computeKycSteps(kyc.docs).some((s) => s.status === 'pending');
+}
+
+/* ----- Copy ----- */
+function stepTitle(step) {
+  if (step.key === 'bvn') return tr('profile.kyc.step_bvn.title', 'Tier 1 — Bank Verification Number');
+  if (step.key === 'identity') return tr('profile.kyc.step_identity.title', 'Tier 2 — Identity document');
+  return tr('profile.kyc.step_address.title', 'Tier 3 — Proof of address');
+}
+
+function stepShortTitle(step) {
+  if (step.key === 'bvn') return tr('profile.kyc.step_bvn.short', 'Tier 1 · BVN');
+  if (step.key === 'identity') return tr('profile.kyc.step_identity.short', 'Tier 2 · Identity');
+  return tr('profile.kyc.step_address.short', 'Tier 3 · Proof of address');
+}
+
+function stepDescription(step) {
+  if (step.key === 'bvn') {
+    return tr('profile.kyc.step_bvn.desc', 'Enter your BVN together with the name and date of birth registered against it.');
+  }
+  if (step.key === 'identity') {
+    return tr('profile.kyc.step_identity.desc', 'Choose one government-issued ID, enter its details exactly as printed, and upload a clear copy.');
+  }
+  return tr('profile.kyc.step_address.desc', 'Upload a recent document that shows your name and your current address.');
+}
+
+function maskIdNumber(value) {
+  const s = String(value || '');
+  if (!s) return '—';
+  if (s.length <= 4) return '••••';
+  return `${'•'.repeat(Math.min(s.length - 4, 8))}${s.slice(-4)}`;
+}
+
+const KYC_ICONS = {
+  check: '<circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5"/><path d="m6.7 10.3 2.2 2.2 4.4-4.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  clock: '<circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.8V10l2.8 1.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  alert: '<path d="M10 3 17.5 16h-15L10 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 8.3v3.2M10 13.7v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  upload: '<path d="M10 13V4M10 4 6.5 7.5M10 4l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+};
+
+function kycIcon(name) {
+  return `<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">${KYC_ICONS[name] || ''}</svg>`;
+}
+
+/* -----------------------------------------------------------
+   Container — created inside the Upload documents screen if the
+   markup doesn't already have #kyc-flow. The legacy single-form
+   card is hidden (not removed) so nothing else breaks.
+   ----------------------------------------------------------- */
+function ensureKycContainer() {
+  let root = document.getElementById('kyc-flow');
+  if (root) return root;
+
+  const screen = document.getElementById('screen-limits-upload');
+  if (!screen) return null;
+
+  screen.querySelectorAll(':scope > .profile-card').forEach((card) => {
+    card.hidden = true;
+  });
+
+  root = document.createElement('div');
+  root.id = 'kyc-flow';
+  screen.appendChild(root);
+  return root;
+}
+
+/* -----------------------------------------------------------
+   Rendering
+   ----------------------------------------------------------- */
+function renderKyc() {
+  const root = document.getElementById('kyc-flow');
+  if (!root) return;
+
+  if (!kyc.loaded) {
+    root.innerHTML = `
+      <div class="profile-card kyc-card kyc-card--loading" aria-busy="true">
+        <p class="profile-card-desc">${escapeHtml(tr('profile.kyc.loading', 'Loading your verification status…'))}</p>
+      </div>`;
+    return;
+  }
+
+  if (kyc.error) {
+    root.innerHTML = `
+      <div class="profile-card kyc-card" role="alert">
+        <div class="profile-card-head"><h3>${escapeHtml(tr('profile.kyc.load_error_title', "We couldn't load your verification status"))}</h3></div>
+        <p class="profile-card-desc">${escapeHtml(tr('profile.kyc.load_error_desc', 'Check your connection and try again. Your existing applications are not affected.'))}</p>
+        <button type="button" class="btn btn-ghost" id="kyc-retry-btn">${escapeHtml(tr('profile.kyc.retry', 'Try again'))}</button>
+      </div>`;
+    $('#kyc-retry-btn')?.addEventListener('click', () => reloadKyc());
+    return;
+  }
+
+  const steps = computeKycSteps(kyc.docs);
+  const doneCount = steps.filter((s) => s.status === 'verified').length;
+  const current = steps.find((s) => s.status !== 'verified') || null;
+
+  const parts = [renderKycOverview(steps, doneCount)];
+
+  steps.forEach((step) => {
+    if (step.status === 'verified') parts.push(renderVerifiedStep(step));
+    else if (step === current) parts.push(step.status === 'pending' ? renderPendingStep(step) : renderKycForm(step));
+    else if (step.status === 'pending') parts.push(renderPendingStep(step)); // out-of-order legacy submission
+  });
+
+  if (!current) parts.push(renderAllComplete());
+
+  root.innerHTML = parts.join('');
+
+  if (current && current.status !== 'pending') wireKycForm(current);
+  $('[data-kyc-focus]', root)?.focus({ preventScroll: false });
+}
+
+function renderKycOverview(steps, doneCount) {
+  const tier = resolveTier();
+  const segments = steps
+    .map((s) => `<span class="kyc-progress-seg${s.status === 'verified' ? ' is-done' : s.status === 'pending' ? ' is-active' : ''}"></span>`)
+    .join('');
+
+  return `
+    <div class="profile-card kyc-card kyc-overview">
+      <div class="profile-card-head">
+        <h3>${escapeHtml(tr('profile.kyc.heading', 'Verification'))}</h3>
+        <span class="tier-badge kyc-tier-badge" data-tier="${tier}">${escapeHtml(tr('profile.tier.label', 'Tier {n}', { n: tier }))}</span>
+      </div>
+      <p class="profile-card-desc">${escapeHtml(tr('profile.kyc.intro', 'Complete each step in order to raise your account tier and limits. The next step opens once the previous one is approved.'))}</p>
+      <div class="kyc-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuenow="${doneCount}" aria-label="${escapeHtml(tr('profile.kyc.progress_label', 'Verification progress'))}">${segments}</div>
+      <p class="field-hint kyc-progress-text">${escapeHtml(tr('profile.kyc.progress_text', '{done} of {total} steps verified', { done: doneCount, total: steps.length }))}</p>
+    </div>`;
+}
+
+function renderVerifiedStep(step) {
+  const when = step.doc?.reviewed_at ? formatDate(step.doc.reviewed_at) : '';
+  return `
+    <div class="profile-card kyc-card kyc-step kyc-step--verified">
+      <div class="profile-card-head">
+        <h4>${escapeHtml(stepShortTitle(step))}</h4>
+        <span class="status-pill status-pill--verified">${kycIcon('check')}${escapeHtml(tr('profile.kyc.status.verified', 'Verified'))}</span>
+      </div>
+      <p class="profile-card-desc">${escapeHtml(docLabel(step.doc?.document_type))}${when ? ` · ${escapeHtml(tr('profile.kyc.verified_on', 'Verified on {date}', { date: when }))}` : ''}</p>
+    </div>`;
+}
+
+function renderAllComplete() {
+  return `
+    <div class="profile-card kyc-card kyc-step kyc-step--complete" role="status">
+      <div class="kyc-submitted">
+        <span class="kyc-submitted-icon kyc-submitted-icon--done">${kycIcon('check')}</span>
+        <div>
+          <h3 data-kyc-focus tabindex="-1">${escapeHtml(tr('profile.kyc.complete.title', 'Verification complete'))}</h3>
+          <p class="profile-card-desc">${escapeHtml(tr('profile.kyc.complete.desc', 'All verification steps are approved. Your account is at the highest tier.'))}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderPendingStep(step) {
+  const doc = step.doc || {};
+  const rows = [
+    [tr('profile.kyc.summary.document', 'Document'), docLabel(doc.document_type)],
+  ];
+  if (doc.id_number) rows.push([tr('profile.kyc.summary.id_number', 'ID number'), maskIdNumber(doc.id_number)]);
+  rows.push([tr('profile.kyc.summary.submitted', 'Submitted'), formatDate(doc.submitted_at, true)]);
+
+  return `
+    <div class="profile-card kyc-card kyc-step kyc-step--pending" role="status">
+      <div class="kyc-submitted">
+        <span class="kyc-submitted-icon kyc-submitted-icon--pending">${kycIcon('clock')}</span>
+        <div>
+          <div class="profile-card-head">
+            <h3 data-kyc-focus tabindex="-1">${escapeHtml(tr('profile.kyc.pending.title', 'Application submitted'))}</h3>
+            <span class="status-pill status-pill--pending">${escapeHtml(tr('profile.kyc.status.under_review', 'Under review'))}</span>
+          </div>
+          <p class="profile-card-desc">${escapeHtml(tr('profile.kyc.pending.desc', 'Your {doc} is being reviewed. We’ll notify you here and in your notifications as soon as a decision is made — you don’t need to submit it again.', { doc: docLabel(doc.document_type) }))}</p>
+        </div>
+      </div>
+
+      <ol class="kyc-timeline" aria-label="${escapeHtml(tr('profile.kyc.timeline_label', 'Application progress'))}">
+        <li class="is-done"><span>${escapeHtml(tr('profile.kyc.timeline.submitted', 'Submitted'))}</span></li>
+        <li class="is-current" aria-current="step"><span>${escapeHtml(tr('profile.kyc.timeline.review', 'Under review'))}</span></li>
+        <li><span>${escapeHtml(tr('profile.kyc.timeline.decision', 'Decision'))}</span></li>
+      </ol>
+
+      <dl class="kyc-summary">
+        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
+      </dl>
+    </div>`;
+}
+
+function renderKycForm(step) {
+  const resubmit = step.status === 'rejected' || step.status === 'action_required';
+  const prev = resubmit ? step.doc : null;
+  const singleType = step.types.length === 1;
+  const selectedType = singleType ? step.types[0] : (prev && step.types.includes(prev.document_type) ? prev.document_type : '');
+  const rule = idRule(selectedType);
+  const today = new Date().toISOString().slice(0, 10);
+
+  /* ---- Rejection / changes-requested banner ---- */
+  let alertHtml = '';
+  if (resubmit) {
+    const rejected = step.status === 'rejected';
+    const reason = prev?.rejection_reason || tr('profile.kyc.no_reason', 'No reason was recorded.');
+    alertHtml = `
+      <div class="kyc-alert kyc-alert--${rejected ? 'danger' : 'warning'}" role="alert" data-kyc-focus tabindex="-1">
+        <span class="kyc-alert-icon">${kycIcon('alert')}</span>
+        <div>
+          <strong>${escapeHtml(rejected
+            ? tr('profile.kyc.rejected.title', 'Your {doc} was not approved', { doc: docLabel(prev?.document_type) })
+            : tr('profile.kyc.action_required.title', 'Your {doc} needs changes', { doc: docLabel(prev?.document_type) }))}</strong>
+          <p class="kyc-alert-reason"><span>${escapeHtml(tr('profile.kyc.reason_label', 'Reason'))}:</span> ${escapeHtml(reason)}</p>
+          <small>${escapeHtml(tr('profile.kyc.reviewed_on', 'Reviewed {date}', { date: formatDate(prev?.reviewed_at, true) }))} · ${escapeHtml(tr('profile.kyc.resubmit_hint', 'Correct the details below and submit again.'))}</small>
+        </div>
+      </div>`;
+  }
+
+  /* ---- Document type ---- */
+  const typeField = singleType
+    ? `<p class="kyc-fixed-type"><span class="kyc-fixed-label">${escapeHtml(tr('profile.kyc.document_label', 'Document'))}</span><strong>${escapeHtml(docLabel(step.types[0]))}</strong></p>`
+    : `
+      <div class="field">
+        <label for="kyc-doc-type">${escapeHtml(tr('profile.kyc.type_label', 'Document type'))}</label>
+        <select id="kyc-doc-type" name="document_type">
+          <option value="">${escapeHtml(tr('profile.upload.type_select_placeholder', 'Select document type'))}</option>
+          ${step.types.map((type) => `<option value="${type}"${type === selectedType ? ' selected' : ''}>${escapeHtml(docLabel(type))}</option>`).join('')}
+        </select>
+        <p class="field-error" data-error-for="type" role="alert"></p>
+      </div>`;
+
+  /* ---- Details (BVN + identity) ---- */
+  const idValue = rule && prev?.id_number ? sanitizeIdInput(prev.id_number, rule) : '';
+  const genderOptions = [
+    ['female', tr('profile.personal.gender.female', 'Female')],
+    ['male', tr('profile.personal.gender.male', 'Male')],
+    ['nonbinary', tr('profile.personal.gender.nonbinary', 'Non-binary')],
+  ];
+
+  const detailsHtml = step.needsDetails
+    ? `
+      <div class="field">
+        <div class="kyc-label-row">
+          <label for="kyc-id-number" id="kyc-id-label">${escapeHtml(rule ? rule.label : tr('profile.kyc.id_number_label', 'ID number'))}</label>
+          <span class="kyc-counter" id="kyc-id-counter" aria-hidden="true"></span>
+        </div>
+        <input type="text" id="kyc-id-number" name="id_number" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="kyc-id-hint" value="${escapeHtml(idValue)}"${rule ? '' : ' disabled'}>
+        <p class="field-hint" id="kyc-id-hint">${escapeHtml(rule ? rule.hint : tr('profile.kyc.choose_type_first', 'Choose a document type first.'))}</p>
+        <p class="field-error" data-error-for="id-number" role="alert"></p>
+      </div>
+
+      <div class="field">
+        <label for="kyc-full-name">${escapeHtml(tr('profile.upload.full_name_label', 'Full name'))}</label>
+        <input type="text" id="kyc-full-name" name="full_name" autocomplete="name" value="${escapeHtml(prev?.full_name || '')}">
+        <p class="field-hint">${escapeHtml(tr('profile.kyc.name_hint', 'Exactly as it appears on the document.'))}</p>
+        <p class="field-error" data-error-for="full-name" role="alert"></p>
+      </div>
+
+      <div class="form-row-2">
+        <div class="field">
+          <label for="kyc-dob">${escapeHtml(tr('profile.upload.dob_label', 'Date of birth'))}</label>
+          <input type="date" id="kyc-dob" name="date_of_birth" min="1900-01-01" max="${today}" value="${escapeHtml(prev?.date_of_birth ? String(prev.date_of_birth).slice(0, 10) : '')}">
+          <p class="field-error" data-error-for="dob" role="alert"></p>
+        </div>
+        <div class="field">
+          <label for="kyc-gender">${escapeHtml(tr('profile.upload.gender_label', 'Gender'))}</label>
+          <select id="kyc-gender" name="gender">
+            <option value="">${escapeHtml(tr('profile.upload.gender_select', 'Select'))}</option>
+            ${genderOptions.map(([value, label]) => `<option value="${value}"${prev?.gender === value ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+          </select>
+          <p class="field-error" data-error-for="gender" role="alert"></p>
+        </div>
+      </div>`
+    : '';
+
+  /* ---- File ---- */
+  const fileHtml = step.needsFile
+    ? `
+      <div class="field">
+        <label id="kyc-file-label">${escapeHtml(tr('profile.upload.file_label', 'Upload document'))}</label>
+        <div class="document-dropzone" id="kyc-dropzone" role="button" tabindex="0" aria-labelledby="kyc-file-label">
+          ${kycIcon('upload')}
+          <p><span>${escapeHtml(tr('profile.upload.dropzone_pre', 'Drag & drop a file here, or '))}</span><span class="document-dropzone-browse">${escapeHtml(tr('profile.upload.dropzone_browse', 'browse files'))}</span></p>
+          <small>${escapeHtml(tr('profile.kyc.file_formats', 'PDF, JPG or PNG — up to 10MB'))}</small>
+          <input type="file" id="kyc-file-input" accept=".pdf,.jpg,.jpeg,.png" hidden>
+        </div>
+        <div class="document-upload-preview" id="kyc-file-preview" hidden>
+          <span class="document-upload-preview-name" id="kyc-file-name">—</span>
+          <button type="button" class="link-arrow-sm" id="kyc-file-remove">${escapeHtml(tr('profile.upload.remove_button', 'Remove'))}</button>
+        </div>
+        <p class="field-error" data-error-for="file" role="alert"></p>
+      </div>`
+    : '';
+
+  return `
+    <div class="profile-card kyc-card kyc-step kyc-step--form">
+      <div class="profile-card-head">
+        <h3>${escapeHtml(stepTitle(step))}</h3>
+        <span class="status-pill ${step.status === 'available' ? 'status-pill--neutral' : 'status-pill--blocked'}">${escapeHtml(
+          step.status === 'rejected'
+            ? tr('profile.kyc.status.rejected', 'Rejected')
+            : step.status === 'action_required'
+            ? tr('profile.kyc.status.action_required', 'Action required')
+            : tr('profile.kyc.status.not_started', 'Not started')
+        )}</span>
+      </div>
+      <p class="profile-card-desc">${escapeHtml(stepDescription(step))}</p>
+      ${alertHtml}
+
+      <form id="kyc-form" class="profile-form" novalidate>
+        ${typeField}
+        ${detailsHtml}
+        ${fileHtml}
+
+        <p class="field-error kyc-form-error" id="kyc-error" role="alert"></p>
+        <p class="field-hint kyc-legal">${escapeHtml(tr('profile.kyc.legal', 'By submitting, you confirm the details are accurate and match your document. You can only have one application under review at a time.'))}</p>
+
+        <div class="profile-form-actions">
+          <button type="submit" class="btn btn-primary" id="kyc-submit" disabled>${escapeHtml(resubmit ? tr('profile.kyc.resubmit', 'Resubmit for verification') : tr('profile.upload.submit', 'Submit for verification'))}</button>
+        </div>
+      </form>
+    </div>`;
+}
+
+/* -----------------------------------------------------------
+   Form behaviour
+   ----------------------------------------------------------- */
+function currentKycType(step) {
+  return step.types.length === 1 ? step.types[0] : $('#kyc-doc-type')?.value || '';
+}
+
+function setKycFieldError(name, message) {
+  const holder = document.querySelector(`[data-error-for="${name}"]`);
+  if (holder) holder.textContent = message || '';
+  const control = document.getElementById(KYC_CONTROL_IDS[name]);
+  if (control) {
+    if (message) control.setAttribute('aria-invalid', 'true');
+    else control.removeAttribute('aria-invalid');
+  }
+}
+
+/** Returns { ok, errors, values }. With report: true, every error is written to the form. */
+function validateKycForm(step, { report = false } = {}) {
+  const errors = {};
+  const type = currentKycType(step);
+  if (!type) errors.type = tr('profile.kyc.error.type_required', 'Choose a document type.');
+
+  const values = { documentType: type };
+
+  if (step.needsDetails) {
+    const rule = idRule(type);
+    const idValue = $('#kyc-id-number')?.value || '';
+    if (rule) {
+      const idError = validateIdNumber(idValue, rule);
+      if (idError) errors['id-number'] = idError;
+    } else if (type) {
+      errors['id-number'] = tr('profile.kyc.error.id_required', 'Enter your {label}.', { label: tr('profile.kyc.id_number_label', 'ID number') });
     } else {
+      errors['id-number'] = tr('profile.kyc.choose_type_first', 'Choose a document type first.');
+    }
+
+    const nameError = validateFullName($('#kyc-full-name')?.value);
+    if (nameError) errors['full-name'] = nameError;
+
+    const dobError = validateDob($('#kyc-dob')?.value);
+    if (dobError) errors.dob = dobError;
+
+    if (!$('#kyc-gender')?.value) errors.gender = tr('profile.kyc.error.gender_required', 'Select your gender.');
+
+    values.idNumber = idValue;
+    values.fullName = ($('#kyc-full-name')?.value || '').trim().replace(/\s+/g, ' ');
+    values.dateOfBirth = $('#kyc-dob')?.value || '';
+    values.gender = $('#kyc-gender')?.value || '';
+  }
+
+  if (step.needsFile) {
+    const fileError = validateKycFile(kyc.file);
+    if (fileError) errors.file = fileError;
+  }
+
+  if (report) {
+    Object.keys(KYC_CONTROL_IDS).forEach((name) => setKycFieldError(name, errors[name] || ''));
+  }
+
+  return { ok: Object.keys(errors).length === 0, errors, values };
+}
+
+function updateKycIdField(step) {
+  if (!step.needsDetails) return;
+  const type = currentKycType(step);
+  const rule = idRule(type);
+  const input = $('#kyc-id-number');
+  const label = $('#kyc-id-label');
+  const hint = $('#kyc-id-hint');
+  const counter = $('#kyc-id-counter');
+  if (!input) return;
+
+  if (!rule) {
+    input.disabled = true;
+    input.value = '';
+    if (label) label.textContent = tr('profile.kyc.id_number_label', 'ID number');
+    if (hint) hint.textContent = tr('profile.kyc.choose_type_first', 'Choose a document type first.');
+    if (counter) counter.textContent = '';
+    return;
+  }
+
+  input.disabled = false;
+  input.maxLength = rule.max;
+  input.inputMode = rule.mode === 'digits' ? 'numeric' : 'text';
+  input.value = sanitizeIdInput(input.value, rule);
+  if (label) label.textContent = rule.label;
+  if (hint) hint.textContent = rule.hint;
+  if (counter) counter.textContent = `${input.value.length}/${rule.max}`;
+}
+
+function wireKycForm(step) {
+  const form = $('#kyc-form');
+  if (!form) return;
+
+  kyc.file = null;
+  const submitBtn = $('#kyc-submit');
+
+  const refreshSubmit = () => {
+    const { ok } = validateKycForm(step);
+    if (submitBtn) submitBtn.disabled = !ok || kyc.submitting;
+  };
+
+  const reportField = (name) => {
+    const { errors } = validateKycForm(step);
+    setKycFieldError(name, errors[name] || '');
+  };
+
+  /* ---- Document type ---- */
+  $('#kyc-doc-type')?.addEventListener('change', () => {
+    updateKycIdField(step);
+    setKycFieldError('type', '');
+    setKycFieldError('id-number', '');
+    refreshSubmit();
+  });
+
+  /* ---- ID number: sanitised live, validated on blur ---- */
+  const idInput = $('#kyc-id-number');
+  idInput?.addEventListener('input', () => {
+    const rule = idRule(currentKycType(step));
+    if (rule) {
+      idInput.value = sanitizeIdInput(idInput.value, rule);
+      const counter = $('#kyc-id-counter');
+      if (counter) counter.textContent = `${idInput.value.length}/${rule.max}`;
+    }
+    setKycFieldError('id-number', '');
+    refreshSubmit();
+  });
+  idInput?.addEventListener('blur', () => {
+    if (idInput.value) reportField('id-number');
+  });
+
+  /* ---- Name / DOB / gender ---- */
+  [['kyc-full-name', 'full-name'], ['kyc-dob', 'dob'], ['kyc-gender', 'gender']].forEach(([id, name]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      setKycFieldError(name, '');
+      refreshSubmit();
+    });
+    el.addEventListener('change', refreshSubmit);
+    el.addEventListener('blur', () => {
+      if (el.value) reportField(name);
+    });
+  });
+
+  /* ---- File ---- */
+  const dropzone = $('#kyc-dropzone');
+  const fileInput = $('#kyc-file-input');
+  const preview = $('#kyc-file-preview');
+  const previewName = $('#kyc-file-name');
+
+  const setFile = (file) => {
+    if (file) {
+      const fileError = validateKycFile(file);
+      if (fileError) {
+        kyc.file = null;
+        if (preview) preview.hidden = true;
+        if (fileInput) fileInput.value = '';
+        setKycFieldError('file', fileError);
+        refreshSubmit();
+        return;
+      }
+      kyc.file = file;
+      if (previewName) previewName.textContent = file.name;
+      if (preview) preview.hidden = false;
+      setKycFieldError('file', '');
+    } else {
+      kyc.file = null;
       if (preview) preview.hidden = true;
-      fileInput.value = '';
+      if (fileInput) fileInput.value = '';
     }
-    updateSubmitState();
-  }
+    refreshSubmit();
+  };
 
-  function updateFieldVisibility() {
-    const category = currentCategory();
-    if (fileField) fileField.hidden = category === 'bvn';
-    if (detailFields) detailFields.hidden = !requiresDetailsFor(category);
-    if (category === 'bvn') setSelectedFile(null);
-  }
-
-  function updateSubmitState() {
-    const category = currentCategory();
-    const hasType = !!typeSelect?.value;
-    const hasFile = !requiresFileFor(category) || !!selectedFile;
-    const hasDetails =
-      !requiresDetailsFor(category) ||
-      (fullNameInput?.value.trim() && idNumberInput?.value.trim() && dobInput?.value && genderInput?.value);
-    if (submitBtn) submitBtn.disabled = !(hasType && hasFile && hasDetails);
-  }
-
-  dropzone.setAttribute('tabindex', '0');
-  dropzone.addEventListener('click', () => fileInput.click());
-  dropzone.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      fileInput.click();
-    }
-  });
-
-  ['dragenter', 'dragover'].forEach((evt) => {
-    dropzone.addEventListener(evt, (event) => {
-      event.preventDefault();
-      dropzone.classList.add('is-dragover');
-    });
-  });
-  ['dragleave', 'drop'].forEach((evt) => {
-    dropzone.addEventListener(evt, (event) => {
-      event.preventDefault();
-      dropzone.classList.remove('is-dragover');
-    });
-  });
-  dropzone.addEventListener('drop', (event) => {
-    const file = event.dataTransfer?.files?.[0];
-    if (file) setSelectedFile(file);
-  });
-
-  fileInput.addEventListener('change', () => setSelectedFile(fileInput.files?.[0] || null));
-  removeBtn?.addEventListener('click', () => setSelectedFile(null));
-  typeSelect?.addEventListener('change', () => {
-    updateFieldVisibility();
-    updateSubmitState();
-  });
-  [fullNameInput, idNumberInput, dobInput, genderInput].forEach((el) => {
-    el?.addEventListener('input', updateSubmitState);
-    el?.addEventListener('change', updateSubmitState);
-  });
-
-  updateFieldVisibility();
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (errorEl) errorEl.textContent = '';
-
-    const documentType = typeSelect?.value;
-    const documentCategory = IDENTITY_CATEGORY_BY_TYPE[documentType];
-
-    if (!documentType || !documentCategory) {
-      if (errorEl) errorEl.textContent = t('profile.upload.error_choose_type');
-      return;
-    }
-    if (requiresFileFor(documentCategory) && !selectedFile) {
-      if (errorEl) errorEl.textContent = t('profile.upload.error_choose_file');
-      return;
-    }
-
-    let fullName, idNumber, dateOfBirth, gender;
-    if (requiresDetailsFor(documentCategory)) {
-      fullName = fullNameInput?.value.trim();
-      idNumber = idNumberInput?.value.trim();
-      dateOfBirth = dobInput?.value;
-      gender = genderInput?.value;
-      if (!fullName || !idNumber || !dateOfBirth || !gender) {
-        if (errorEl) errorEl.textContent = t('profile.upload.error_fill_details');
-        return;
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        fileInput.click();
       }
-    }
-
-    if (submitBtn) submitBtn.disabled = true;
-    submitBtn?.classList.add('is-loading');
-    const showsProgress = requiresFileFor(documentCategory);
-    if (showsProgress) {
-      if (progress) progress.hidden = false;
-      if (progressBar) progressBar.style.width = '15%';
-    }
-
-    try {
-      if (showsProgress && progressBar) progressBar.style.width = '60%';
-      const { error } = await submitIdentityDocument({
-        file: selectedFile,
-        documentType,
-        documentCategory,
-        fullName,
-        idNumber,
-        dateOfBirth,
-        gender,
+    });
+    ['dragenter', 'dragover'].forEach((name) => {
+      dropzone.addEventListener(name, (event) => {
+        event.preventDefault();
+        dropzone.classList.add('is-dragover');
       });
-      if (showsProgress && progressBar) progressBar.style.width = '100%';
-
-      if (error) {
-        if (errorEl) errorEl.textContent = error;
-        toast(error, 'error');
-        return;
-      }
-
-      if (statusPill) statusPill.hidden = false;
-      toast(t('profile.upload.toast_submitted'));
-      form.reset();
-      setSelectedFile(null);
-      updateFieldVisibility();
-    } catch (err) {
-      if (errorEl) errorEl.textContent = t('profile.upload.error_failed');
-    } finally {
-      submitBtn?.classList.remove('is-loading');
-      updateSubmitState();
-      window.setTimeout(() => {
-        if (progress) progress.hidden = true;
-        if (progressBar) progressBar.style.width = '0%';
-      }, 600);
-    }
-  });
-}
-
-/* -----------------------------------------------------------
-   8. Danger zone — no backend yet, honest placeholders
-   ----------------------------------------------------------- */
-function wireDangerZone() {
-  const dangerScreen = document.getElementById('screen-danger');
-  if (!dangerScreen) return;
-
-  const exportBtn = dangerScreen.querySelector('.btn-ghost');
-  const closeBtn = dangerScreen.querySelector('.btn-danger');
-
-  exportBtn?.addEventListener('click', () => {
-    toast(t('profile.danger.export.toast'), 'error');
-  });
-
-  closeBtn?.addEventListener('click', () => {
-    toast(t('profile.danger.close.toast'), 'error');
-  });
-}
-
-/* -----------------------------------------------------------
-   9. Avatar upload
-   ----------------------------------------------------------- */
-function wireAvatarUpload() {
-  const editBtn = document.querySelector('.profile-avatar-edit');
-  if (!editBtn) return;
-
-  // profile.html has no <input type="file"> tied to this button —
-  // created here rather than editing that markup (see KNOWN GAPS).
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.hidden = true;
-  document.body.appendChild(input);
-
-  editBtn.addEventListener('click', () => input.click());
-
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file || !currentUser) return;
-
-    editBtn.classList.add('is-loading');
-    try {
-      const { data, error } = await uploadAvatar(file, currentUser.id);
-      if (error) {
-        toast(error, 'error');
-        return;
-      }
-
-      const fullName = currentFullName();
-      const initials = getInitials(fullName);
-      renderAvatarLocal(document.querySelector('.profile-avatar-wrap .avatar-initial'), data.url, initials);
-      $$('.app-user-menu .avatar-initial').forEach((el) => renderAvatarLocal(el, data.url, initials));
-
-      toast(t('profile.avatar.toast_updated'));
-    } finally {
-      editBtn.classList.remove('is-loading');
-      input.value = '';
-    }
-  });
-}
-
-/* -----------------------------------------------------------
-   Init
-   ----------------------------------------------------------- */
-async function init() {
-  screenStack = initScreenStack();
-  wirePasswordToggles();
-
-  const { data: user, error: userError } = await getCurrentUser();
-  if (userError || !user) return; // auth-ui.js's requireAuth() already handles the redirect
-
-  currentUser = user;
-
-  const { data: profile, error: profileError } = await getMyProfile(user.id);
-  if (profileError) console.warn('[Meridian] Could not load profile:', profileError);
-  currentProfile = profile;
-
-  // The logged-in user's saved language preference is the source
-  // of truth once it's known — apply it now (persist: false, per
-  // translation.js's own contract, since this isn't a fresh manual
-  // choice). Harmless no-op if the profile has no language yet or
-  // MeridianI18n isn't present for some reason.
-  if (profile?.language && window.MeridianI18n?.setLanguage) {
-    window.MeridianI18n.setLanguage(profile.language, { persist: false });
+    });
+    ['dragleave', 'drop'].forEach((name) => {
+      dropzone.addEventListener(name, (event) => {
+        event.preventDefault();
+        dropzone.classList.remove('is-dragover');
+      });
+    });
+    dropzone.addEventListener('drop', (event) => {
+      const file = event.dataTransfer?.files?.[0];
+      if (file) setFile(file);
+    });
+    fileInput.addEventListener('change', () => setFile(fileInput.files?.[0] || null));
+    $('#kyc-file-remove')?.addEventListener('click', () => setFile(null));
   }
 
-  const { data: accounts } = await getMyAccounts(user.id);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    handleKycSubmit(step);
+  });
 
-  populateBanner(user, profile);
-  populatePersonalInfo(user, profile);
-  populateAccountInfo(profile);
-  populateActivityPlaceholder();
-  wireAccountNumberToggle(accounts || []);
-
-  await loadOverviewSummary(user.id, accounts || []);
-  await loadSessions(user.id);
-  await loadFaceIdStatus(user.id);
-
-  wirePasswordForms();
-  wireForgotPassword();
-  wireTwoFactorPicker();
-  wireNotificationToggles();
-  wireLoginSessionPreference();
-  wireLinkedId();
-  wireDocumentUpload();
-  wireAvatarUpload();
-  wireDangerZone();
+  updateKycIdField(step);
+  refreshSubmit();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+function showKycFormError(message) {
+  const el = $('#kyc-error');
+  if (el) el.textContent = message || '';
+}
+
+function friendlySubmitError(message) {
+  if (/duplicate|unique|already/i.test(String(message))) {
+    return tr('profile.kyc.error.already_open', 'You already have an application under review for this step.');
+  }
+  return message || tr('profile.upload.error_failed', 'Something went wrong. Please try again.');
+}
+
+async function handleKycSubmit(step) {
+  if (kyc.submitting || !currentUser) return;
+
+  const { ok, errors, values } = validateKycForm(step, { report: true });
+  if (!ok) {
+    const firstInvalid = Object.keys(KYC_CONTROL_IDS).find((name) => errors[name]);
+    document.getElementById(KYC_CONTROL_IDS[firstInvalid])?.focus();
+    return;
+  }
+
+  const submitBtn = $('#kyc-submit');
+  showKycFormError('');
+  kyc.submitting = true;
+  submitBtn?.classList.add('is-loading');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    // Re-read the server state first: another tab, or a decision that
+    // landed while this form was open, must not let a second
+    // application through.
+    const { data: fresh, error: freshError } = await getMyIdentityDocumentHistory(currentUser.id);
+    if (freshError) {
+      showKycFormError(tr('profile.kyc.error.status_check', "We couldn't check your application status. Please try again."));
+      return;
+    }
+    kyc.docs = fresh || [];
+    kyc.signature = kycSignature(kyc.docs);
+
+    const steps = computeKycSteps(kyc.docs);
+    const index = steps.findIndex((s) => s.key === step.key);
+
+    if (steps.slice(0, index).some((s) => s.status !== 'verified')) {
+      toast(tr('profile.kyc.error.previous_step', 'Complete the previous verification step first.'), 'error');
+      renderKyc();
+      return;
+    }
+    if (steps[index].status === 'pending' || steps[index].status === 'verified') {
+      toast(tr('profile.kyc.error.already_open', 'You already have an application under review for this step.'), 'error');
+      renderKyc();
+      return;
+    }
+
+    const { error } = await submitIdentityDocument({
+      file: step.needsFile ? kyc.file : null,
+      documentType: values.documentType,
+      documentCategory: step.category,
+      fullName: values.fullName,
+      idNumber: values.idNumber,
+      dateOfBirth: values.dateOfBirth,
+      gender: values.gender,
+    });
+
+    if (error) {
+      const message = friendlySubmitError(error);
+      showKycFormError(message);
+      toast(message, 'error');
+      return;
+    }
+
+    toast(tr('profile.kyc.toast_submitted', 'Application submitted. We’ll notify you once it has been reviewed.'));
+    await reloadKyc({ silent: true });
+  } catch (err) {
+    showKycFormError(tr('profile.upload.error_failed', 'Something went wrong. Please try again.'));
+  } finally {
+    kyc.submitting = false;
+    if (submitBtn && document.body.contains(submitBtn)) {
+      submitBtn.classList.remove('is-loading');
+      const { ok: stillOk } = validateKycForm(step);
+      submitBtn.disabled = !stillOk;
+    }
+  }
+}
+
+/* -----------------------------------------------------------
+   Loading, live updates
+   ----------------------------------------------------------- */
+async function reloadKyc({ silent = false } = {}) {
+  if (!currentUser) return;
+  const token = ++kycLoadToken;
+
+  if (!silent) {
+    kyc.loaded = false;
+    kyc.error = null;
+    renderKyc();
+  }
+
+  const { data, error } = await getMyIdentityDocumentHistory(currentUser.id);
+  if (token !== kycLoadToken) return; // a newer request superseded this one
+
+  if (error) {
+    if (!silent || !kyc.loaded) {
+      kyc.error = error;
+      kyc.loaded = true;
+      renderKyc();
+    }
+    return;
+  }
+
+  const nextSignature = kycSignature(data);
+  const unchanged = silent && kyc.loaded && !kyc.error && nextSignature === kyc.signature;
+
+  kyc.docs = data || [];
+  kyc.signature = nextSignature;
+  kyc.error = null;
+  kyc.loaded = true;
+
+  // A silent refresh with nothing new must not re-render — that would
+  // wipe whatever the user is typing into the form.
+  if (!unchanged) renderKyc();
+}
+
+/** A decision may have changed the tier, account status and Linked ID slots — pull all of it. */
+async function refreshAfterDecision() {
+  if (!currentUser) return;
+  try {
+    const { data: profile } = await getMyProfile(currentUser.id);
+    if (profile) {
+      currentProfile = profile;
+      populateBanner(currentUser, profile);
+      renderTierBadges();
+    }
+    const before = kyc.signature;
+    await reloadKyc({ silent: true });
+    if (kyc.signature !== before) await refreshOverviewAfterDecision();
+    renderKyc(); // tier badge inside the overview card may have changed even if the signature didn't
+  } catch (err) {
+    console.warn('[Meridian] Could not refresh verification state:', err);
+  }
+}
+
+let decisionRefreshTimer = null;
+function scheduleDecisionRefresh() {
+  window.clearTimeout(decisionRefreshTimer);
+  decisionRefreshTimer = window.setTimeout(refreshAfterDecision, 600);
+}
+
+/**
+ * Listens for new rows in `notifications` — the same feed the header
+ * bell subscribes to (which also shows the toast). Its own channel
+ * name is used so it can't collide with the bell's subscription.
+ * Any new notification triggers a cheap re-read; the signature check
+ * in reloadKyc() keeps that invisible unless something changed.
+ */
+function subscribeToKycUpdates(userId) {
+  try {
+    const channel = supabase
+      .channel(`profile-kyc:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        scheduleDecisionRefresh
+      )
+      .subscribe();
+    window.addEventListener('pagehide', () => supabase.removeChannel(channel));
+  } catch (err) {
+    console.warn('[Meridian] Live verification updates unavailable:', err);
+  }
+
+  // Fallback if realtime is off or the connection dropped: when the
+  // tab regains focus while an application is under review, re-check.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && kycHasPending()) scheduleDecisionRefresh();
+  });
+}
+
+function initKyc() {
+  if (!ensureKycContainer()) return;
+  renderKyc();
+  reloadKyc();
+  subscribeToKycUpdates(currentUser.id);
+}
