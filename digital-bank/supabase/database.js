@@ -907,10 +907,10 @@ export async function getMyIdentityDocumentHistory(userId) {
     supabase
       .from('identity_documents')
       .select(
-        'id, document_category, document_type, status, slot, rejection_reason, created_at, reviewed_at, id_type, full_name, id_number, date_of_birth, gender'
+        'id, document_category, document_type, status, slot, rejection_reason, submitted_at, reviewed_at, id_type, full_name, id_number, date_of_birth, gender'
       )
       .eq('user_id', uid)
-      .order('created_at', { ascending: false })
+      .order('submitted_at', { ascending: false })
   );
 }
 
