@@ -1259,6 +1259,10 @@
   margin-top: 1.5rem;
 }
 
+.linked-id-grid[hidden] {
+  display: none;
+}
+
 .linked-id-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
