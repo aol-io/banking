@@ -1,1 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KYC queue — Meridian Admin</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="../../assets/css/style.css">
+<link rel="stylesheet" href="../../assets/css/dashboard.css">
+<link rel="stylesheet" href="../../assets/css/components.css">
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<link rel="stylesheet" href="../../assets/css/admin-kyc.css">
+</head>
+<body class="app-body admin-body kyc-page" data-auth="pending">
 
+<div class="auth-loader" aria-hidden="true"><span class="auth-loader-mark"></span></div>
+
+<div data-component="admin-navbar"></div>
+
+<main id="main-content" class="admin-main">
+  <div class="container">
+
+    <div class="page-head page-head--split">
+      <div>
+        <h1>KYC queue</h1>
+        <p>Documents waiting for review, oldest first. Verifying a document updates the applicant's tier and activates their account.</p>
+      </div>
+    </div>
+
+    <div class="admin-stat-row" id="kyc-summary" aria-live="polite">
+      <div class="admin-stat-card admin-stat-card--warning">
+        <span class="admin-stat-label">Awaiting review</span>
+        <span class="admin-stat-value" id="stat-pending">—</span>
+      </div>
+      <div class="admin-stat-card">
+        <span class="admin-stat-label">Oldest waiting</span>
+        <span class="admin-stat-value" id="stat-oldest">—</span>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         QUEUE — one row per pending document (identity_documents,
+         status = 'pending'). An applicant with two documents
+         appears twice; each is reviewed on its own.
+         ========================================================= -->
+    <div class="admin-toolbar">
+      <div class="admin-search-field">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/><path d="m14 14-3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <input type="search" id="kyc-search" placeholder="Filter by name or email…" aria-label="Filter queue">
+      </div>
+      <label class="kyc-filter">
+        <span class="sr-only">Document category</span>
+        <select id="kyc-category" class="kyc-select">
+          <option value="">All documents</option>
+          <option value="bvn">BVN</option>
+          <option value="identity">Identity documents</option>
+          <option value="proof_of_address">Proof of address</option>
+        </select>
+      </label>
+      <span class="admin-toolbar-count" id="kyc-count" aria-live="polite"></span>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th scope="col">Applicant</th>
+            <th scope="col">Email</th>
+            <th scope="col">Document</th>
+            <th scope="col">Waiting since</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="kyc-table-body" aria-live="polite">
+          <tr class="admin-table-skeleton-row"><td colspan="5">Loading queue…</td></tr>
+        </tbody>
+      </table>
+
+      <p class="admin-table-empty" id="kyc-empty" hidden>The queue is empty.</p>
+    </div>
+
+    <div class="admin-pagination" id="kyc-pagination" aria-live="polite">
+      <button type="button" class="btn btn-ghost btn-sm" id="kyc-prev-page" disabled>Previous</button>
+      <span id="kyc-page-indicator">Page 1</span>
+      <button type="button" class="btn btn-ghost btn-sm" id="kyc-next-page" disabled>Next</button>
+    </div>
+
+  </div>
+</main>
+
+<!-- =========================================================
+     DOCUMENT REVIEW DRAWER — content is injected by admin-kyc.js
+     ========================================================= -->
+<div class="admin-drawer-overlay" id="kyc-drawer-overlay" aria-hidden="true">
+  <aside class="admin-drawer" role="dialog" aria-modal="true" aria-labelledby="kyc-drawer-title">
+    <div class="admin-drawer-head">
+      <div class="admin-drawer-identity">
+        <span class="avatar-initial" id="kyc-drawer-avatar">·</span>
+        <div>
+          <h2 id="kyc-drawer-title">—</h2>
+          <span id="kyc-drawer-subtitle" class="admin-drawer-subtitle">—</span>
+        </div>
+      </div>
+      <button type="button" class="modal-close" id="kyc-drawer-close" aria-label="Close">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 2l12 12M14 2 2 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="admin-drawer-body" id="kyc-drawer-body">
+      <!-- injected by admin-kyc.js -->
+    </div>
+  </aside>
+</div>
+
+<!-- =========================================================
+     DECISION MODAL — one modal for all three outcomes (verify,
+     request changes, reject). admin-kyc.js fills in the title,
+     the effect note and whether a reason is required.
+     ========================================================= -->
+<div class="modal-overlay" id="decision-modal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="decision-modal-title">
+    <div class="modal-head">
+      <div>
+        <h3 id="decision-modal-title">Review document</h3>
+        <p id="decision-modal-lede"></p>
+      </div>
+      <button type="button" class="modal-close" data-close-modal aria-label="Close">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 2l12 12M14 2 2 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <form id="decision-modal-form" novalidate>
+      <dl class="kyc-modal-doc">
+        <div><dt>Applicant</dt><dd id="decision-modal-applicant">—</dd></div>
+        <div><dt>Document</dt><dd id="decision-modal-document">—</dd></div>
+      </dl>
+
+      <p class="kyc-effect" id="decision-modal-effect"></p>
+
+      <!-- Verify only, BVN and identity documents. Prefilled from what the
+           applicant entered; whatever is here is saved on the verified record. -->
+      <fieldset class="kyc-modal-fields" id="decision-details" hidden>
+        <legend>Confirm the details</legend>
+        <p class="kyc-hint">Correct anything that differs from the document. These values are saved with the verification.</p>
+        <div class="field">
+          <label for="decision-full-name">Full name</label>
+          <input type="text" id="decision-full-name" autocomplete="off">
+        </div>
+        <div class="form-row-2">
+          <div class="field">
+            <label for="decision-id-number">ID number</label>
+            <input type="text" id="decision-id-number" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="decision-dob">Date of birth</label>
+            <input type="date" id="decision-dob">
+          </div>
+        </div>
+        <div class="field">
+          <label for="decision-gender">Gender</label>
+          <select id="decision-gender">
+            <option value="">Not stated</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="nonbinary">Non-binary</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <div class="field" id="decision-reason-field">
+        <label for="decision-modal-reason" id="decision-reason-label">Reason</label>
+        <textarea id="decision-modal-reason" rows="3"></textarea>
+      </div>
+
+      <p class="kyc-modal-error" id="decision-modal-error" role="alert" hidden></p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="decision-modal-submit">Confirm</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+<script src="../../assets/js/main.js"></script>
+<script type="module" src="admin-kyc.js"></script>
+</body>
+</html>
