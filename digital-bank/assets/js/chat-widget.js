@@ -84,8 +84,10 @@ import { formatTimestamp } from './utils.js';
 
 const SESSION_KEY = 'meridian-chat-open';
 const HEARTBEAT_INTERVAL_MS = 30000;
-/** <body> class toggled while the panel is open — see FIX note above and components.css. */
+/** <body> classes toggled while the panel is open — see FIX note above and components.css. */
 const BODY_OPEN_CLASS = 'chat-panel-open';
+const BODY_LOCKED_CLASS = 'chat-panel-locked'; // iOS-proof scroll lock (position:fixed body)
+let lockedScrollY = 0; // saved so closePanel() can restore the page's scroll offset
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let state = {
@@ -306,9 +308,15 @@ async function openPanel() {
   launcher.setAttribute('aria-label', 'Close chat support');
   state.panelOpen = true;
   // Locks background scroll while the full-screen mobile panel is
-  // open (components.css: body.chat-panel-open { overflow: hidden }).
-  // No-op above the 480px breakpoint, where the panel isn't full-screen.
+  // open. chat-panel-open covers browsers that respect
+  // overflow:hidden on body; chat-panel-locked additionally pins
+  // body with position:fixed for iOS Safari, which ignores plain
+  // overflow:hidden for touch-scrolling. Both are no-ops above the
+  // 480px breakpoint, where the panel isn't full-screen.
+  lockedScrollY = window.scrollY || window.pageYOffset || 0;
   document.body.classList.add(BODY_OPEN_CLASS);
+  document.body.classList.add(BODY_LOCKED_CLASS);
+  document.body.style.top = `-${lockedScrollY}px`;
   sessionStorage.setItem(SESSION_KEY, '1');
 
   if (!state.threadId) {
@@ -335,6 +343,9 @@ function closePanel() {
   launcher.setAttribute('aria-label', 'Open chat support');
   state.panelOpen = false;
   document.body.classList.remove(BODY_OPEN_CLASS);
+  document.body.classList.remove(BODY_LOCKED_CLASS);
+  document.body.style.top = '';
+  window.scrollTo(0, lockedScrollY); // undo the position:fixed pin without losing the page's place
   sessionStorage.removeItem(SESSION_KEY);
   closeMenu();
   stopHeartbeat();
@@ -695,6 +706,8 @@ export function unmountChatWidget() {
   stopHeartbeat();
   clearPendingFile();
   document.body.classList.remove(BODY_OPEN_CLASS);
+  document.body.classList.remove(BODY_LOCKED_CLASS);
+  document.body.style.top = '';
   state = {
     threadId: null, channel: null, panelOpen: false, mounted: false, allowGuest: false,
     pendingFile: null, previewObjectUrl: null, soundEnabled: true, audioCtx: null,
