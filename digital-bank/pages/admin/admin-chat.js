@@ -13,6 +13,14 @@
 
    FIX LOG (this revision)
    ------------------------
+   - NAVBAR-OVER-CHAT FIX: init() now adds an `is-admin-chat-page`
+     class to <body> directly, rather than leaning solely on
+     admin-chat.css's `body.admin-body:has(.admin-chat-shell)`
+     selector to hide the admin topbar/sidebar on mobile. :has()
+     support and the navbar's own stacking context can vary, so this
+     class is the reliable trigger; admin-chat.css's z-index on
+     .admin-chat-shell was also raised well above anything else on
+     the page as a second line of defense.
    - MOBILE KEYBOARD/LAYOUT FIX: added setViewportHeightVar(), driven
      by window.visualViewport, which writes a --app-vh custom
      property that admin-chat.css's mobile section (8) sizes the
@@ -126,6 +134,7 @@ async function init() {
   wireBackToList();
   wireAttachmentViewer();
   wireViewportHeight();
+  document.body.classList.add('is-admin-chat-page');
 
   await loadThreads();
   subscribeToRealtime();
