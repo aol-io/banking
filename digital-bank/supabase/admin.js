@@ -405,6 +405,163 @@ export async function rejectKyc(userId, reason) {
   return wrap(supabase.rpc('admin_reject_kyc', { p_user_id: userId, p_reason: reason }));
 }
 
+
+
+
+/* =============================================================
+   MERIDIAN — supabase/admin.js  (ADDITIONS, revision 2)
+
+   Paste this block into supabase/admin.js as a new section
+   "4b. KYC documents", directly after rejectKyc() in section 4.
+
+   Nothing to import: it uses `supabase`, `wrap()` and
+   `friendlyAdminError()` that admin.js already defines, and
+   follows the same { data, error } convention (error is a string
+   or null).
+
+   Reads need admin SELECT access to identity_documents and to the
+   identity-documents storage bucket (see admin-kyc-setup.sql).
+   The decision goes through the existing SECURITY DEFINER function
+   admin_review_identity_document() — no direct table writes.
+
+   Column note: rows are ordered by created_at (oldest first). If
+   identity_documents names its submission timestamp something
+   else, change SUBMITTED_COLUMN here and `created_at` in
+   admin-kyc.js.
+   ============================================================= */
+
+/* -----------------------------------------------------------
+   4b. KYC documents — admin-kyc.html
+   ----------------------------------------------------------- */
+const IDENTITY_BUCKET = 'identity-documents';
+const SUBMITTED_COLUMN = 'created_at';
+
+// user_id and reviewed_by both point at user_profiles, so the embed
+// has to name the foreign key it follows.
+const APPLICANT_EMBED =
+  'applicant:user_profiles!identity_documents_user_id_fkey ( first_name, last_name, email, country )';
+
+/**
+ * Applicant ids whose name or email matches every word in `search`
+ * (up to three words). Returns { ids: null } when there is nothing to
+ * filter on.
+ */
+async function findUserIdsBySearch(search) {
+  const tokens = String(search || '')
+    .toLowerCase()
+    .replace(/[%,()*\\]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3);
+
+  let ids = null;
+
+  for (const token of tokens) {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .or(`first_name.ilike.%${token}%,last_name.ilike.%${token}%,email.ilike.%${token}%`)
+      .limit(100);
+
+    if (error) return { ids: null, error: friendlyAdminError(error) };
+
+    const found = new Set((data || []).map((row) => row.id));
+    ids = ids ? new Set([...ids].filter((id) => found.has(id))) : found;
+    if (!ids.size) break;
+  }
+
+  return { ids: ids ? [...ids] : null, error: null };
+}
+
+/**
+ * Pending documents, oldest first, with the applicant embedded.
+ * → { data: { rows, total, page, pageSize }, error }
+ */
+export async function listPendingIdentityDocuments({ search, category, page = 1, pageSize = 25 } = {}) {
+  let userIds = null;
+
+  if (search) {
+    const found = await findUserIdsBySearch(search);
+    if (found.error) return { data: null, error: found.error };
+    userIds = found.ids;
+    if (userIds && !userIds.length) return { data: { rows: [], total: 0, page, pageSize }, error: null };
+  }
+
+  const from = (page - 1) * pageSize;
+
+  let query = supabase
+    .from('identity_documents')
+    .select(`*, ${APPLICANT_EMBED}`, { count: 'exact' })
+    .eq('status', 'pending')
+    .order(SUBMITTED_COLUMN, { ascending: true })
+    .range(from, from + pageSize - 1);
+
+  if (category) query = query.eq('document_category', category);
+  if (userIds) query = query.in('user_id', userIds);
+
+  const { data, error, count } = await query;
+  if (error) return { data: null, error: friendlyAdminError(error) };
+  return { data: { rows: data || [], total: count ?? (data || []).length, page, pageSize }, error: null };
+}
+
+/**
+ * Every submission from one applicant, newest first.
+ * → { data: [rows], error }
+ */
+export async function getIdentityDocumentsForUser(userId) {
+  const { data, error } = await supabase
+    .from('identity_documents')
+    .select('*')
+    .eq('user_id', userId)
+    .order(SUBMITTED_COLUMN, { ascending: false });
+
+  if (error) return { data: [], error: friendlyAdminError(error) };
+  return { data: data || [], error: null };
+}
+
+/**
+ * Short-lived private link to a submitted file (5 minutes by default).
+ * → { data: url, error }
+ */
+export async function getIdentityDocumentUrl(filePath, expiresIn = 300) {
+  const { data, error } = await wrap(supabase.storage.from(IDENTITY_BUCKET).createSignedUrl(filePath, expiresIn));
+  if (error) return { data: null, error };
+  return { data: data?.signedUrl || null, error: null };
+}
+
+/**
+ * Decide a document through admin_review_identity_document().
+ *
+ * `details` carries the optional review fields the database function
+ * accepts: { slot, idType, fullName, idNumber, dateOfBirth, gender }.
+ * Only the ones that are set are sent, so the function's own defaults
+ * apply for the rest.
+ *
+ * `decision` must be a value the database function accepts — check it
+ * against the function's definition before relying on the page's
+ * 'verified' | 'rejected' | 'action_required'.
+ */
+export async function reviewIdentityDocument(documentId, decision, reason = null, details = {}) {
+  const args = {
+    p_document_id: documentId,
+    p_decision: decision,
+    p_reason: reason ?? null,
+  };
+
+  const optional = {
+    p_slot: details.slot,
+    p_id_type: details.idType,
+    p_full_name: details.fullName,
+    p_id_number: details.idNumber,
+    p_date_of_birth: details.dateOfBirth,
+    p_gender: details.gender,
+  };
+  Object.entries(optional).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') args[key] = value;
+  });
+
+  return wrap(supabase.rpc('admin_review_identity_document', args));
+}
 /* -----------------------------------------------------------
    5. Cards — admin-cards.html
    ----------------------------------------------------------- */
