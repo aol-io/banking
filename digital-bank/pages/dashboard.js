@@ -18,13 +18,11 @@
         immediately, racing components.js's fetch() for the
         app-navbar partial; on a slow connection they'd each
         silently find nothing and never retry)
-     6. Total balance + account strip, built from real accounts —
-        amounts render currency-sign-first ($1,234.56) rather than
-        with a trailing unit
-     7. Hide-balance toggle — masks the total balance and
-        account-strip amounts with "••••••", persisted in
-        localStorage; see initBalanceVisibilityToggle() /
-        applyBalanceVisibility()
+     6. Total balance — a single figure converted to the user's
+        chosen default display currency (see FIX LOG)
+     7. Hide-balance toggle — masks the total balance with
+        "••••••", persisted in localStorage; see
+        initBalanceVisibilityToggle() / applyBalanceVisibility()
      8. Recent transactions, spending breakdown, savings goals,
         and card preview — all scoped to the user's primary
         (first-opened) account. See the note above
@@ -36,7 +34,28 @@
     11. Automation showcase — animates a real stat (total saved
         across the user's goals) into the sidebar upsell card
 
-   FIX LOG
+   FIX LOG (this revision)
+   ----------------------------------------------------------------
+   TOTAL BALANCE CURRENCY: the balance card previously did two
+   things wrong at once — it showed a per-account "account strip"
+   with an "Add currency" tile bolted on, AND the headline total was
+   hardcoded to `getTotalBalance(undefined, 'USD')` regardless of
+   what the person actually picked in Settings -> General ->
+   "Default display currency" (user_profiles.default_currency,
+   settings.js's initGeneralForm()/initLanguageSelect() save it).
+   Changing that setting had zero visible effect here.
+   Fixed both: renderBalanceAndAccounts() no longer builds the
+   account-strip markup at all (dashboard.html's account-strip
+   block was removed to match — nothing calls into it anymore), and
+   the total now reads the signed-in user's own profile on every
+   dashboard load and converts to profile.default_currency (falling
+   back to USD only for a brand-new profile that hasn't set one
+   yet). Since this re-fetches the profile fresh each time
+   dashboard.html loads, changing the currency in Settings and then
+   opening/reloading the dashboard is enough to see it reflected —
+   no separate cache to invalidate.
+
+   PRIOR FIX LOG
    ----------------------------------------------------------------
    translation.js self-inits on DOMContentLoaded using only
    localStorage -> geo -> browser language -> English. It has no
@@ -379,12 +398,12 @@ function initLogout() {
 
 /* -----------------------------------------------------------
    Hide-balance toggle
-   Masks every [data-sensitive-amount] element (the total balance
-   + account-strip amounts) with "••••••". State persists across
-   reloads via localStorage. Re-apply after any render that
-   rewrites those elements' innerHTML (renderBalanceAndAccounts
-   creates new account-strip nodes each call), since the stored
-   "real" value lives in a data attribute on the element itself.
+   Masks the [data-sensitive-amount] total balance element with
+   "••••••". State persists across reloads via localStorage.
+   Re-apply after any render that rewrites that element's
+   innerHTML (renderBalanceAndAccounts does, every load), since the
+   stored "real" value lives in a data attribute on the element
+   itself.
    ----------------------------------------------------------- */
 const BALANCE_HIDDEN_KEY = 'meridian-hide-balance';
 const MASK = '••••••';
@@ -427,55 +446,44 @@ function initBalanceVisibilityToggle() {
 }
 
 /* -----------------------------------------------------------
-   Total balance + account strip
-   Uses every account the user has, since the balance card is
-   meant to represent their whole portfolio, not just one
-   currency. Amounts render currency-sign-first via formatMoney().
+   Total balance
+   -----------------------------------------------------------
+   Shows ONE figure — the user's whole portfolio converted into
+   whichever currency they've set as their "Default display
+   currency" in Settings -> General (user_profiles.default_currency).
+   No per-account strip / "Add currency" tile anymore (removed from
+   dashboard.html to match) — accounts.html is still the place to
+   see or manage individual accounts; this card is a single summary
+   number by design.
+
+   The profile is fetched fresh on every call rather than cached,
+   so the figure always reflects whatever was last saved in
+   Settings — no separate invalidation needed when the person
+   changes their currency preference and comes back to the
+   dashboard.
    ----------------------------------------------------------- */
 async function renderBalanceAndAccounts(accounts) {
   const balanceEl = $('#dashboard-balance-amount') || $('.dashboard-balance-card .balance-amount');
-  const stripEl = $('.account-strip');
-  const addItem = stripEl ? stripEl.querySelector('.account-strip-item--add') : null;
 
-  Array.from(stripEl?.querySelectorAll('.account-strip-item:not(.account-strip-item--add)') || []).forEach((el) => el.remove());
+  if (!balanceEl) return;
 
   if (!accounts.length) {
-    if (balanceEl) {
-      unskeleton(balanceEl);
-      balanceEl.innerHTML = '$0<small>.00</small>';
-    }
+    unskeleton(balanceEl);
+    balanceEl.innerHTML = '$0<small>.00</small>';
     return;
   }
 
-  if (balanceEl) {
-    const { data: totalData } = await getTotalBalance(undefined, 'USD');
-    unskeleton(balanceEl);
-    const [intPart, decPart = '00'] = Number(totalData?.total || 0).toFixed(2).split('.');
-    balanceEl.innerHTML = `${currencySymbol(totalData?.currency || 'USD')}${Number(intPart).toLocaleString('en-US')}<small>.${decPart}</small>`;
-  }
+  const { data: profile } = await getMyProfile();
+  const displayCurrency = profile?.default_currency || 'USD';
 
-  if (stripEl) {
-    const fragment = document.createDocumentFragment();
-    accounts.forEach((account) => {
-      const item = document.createElement('a');
-      item.href = 'accounts.html';
-      item.className = 'account-strip-item';
-      item.innerHTML = `
-        <span class="account-strip-flag">${currencySymbol(account.currency)}</span>
-        <div>
-          <strong>${account.currency} account</strong>
-          <span data-sensitive-amount>${formatMoney(account.balance, account.currency)}</span>
-        </div>
-      `;
-      fragment.appendChild(item);
-    });
+  const { data: totalData } = await getTotalBalance(undefined, displayCurrency);
+  unskeleton(balanceEl);
+  const resolvedCurrency = totalData?.currency || displayCurrency;
+  const [intPart, decPart = '00'] = Number(totalData?.total || 0).toFixed(2).split('.');
+  balanceEl.innerHTML = `${currencySymbol(resolvedCurrency)}${Number(intPart).toLocaleString('en-US')}<small>.${decPart}</small>`;
 
-    if (addItem) stripEl.insertBefore(fragment, addItem);
-    else stripEl.appendChild(fragment);
-  }
-
-  // Re-apply the persisted hide/show state — the elements above
-  // were just recreated, so any earlier masking is gone.
+  // Re-apply the persisted hide/show state — the element above was
+  // just rewritten, so any earlier masking is gone.
   applyBalanceVisibility(balanceHidden);
 }
 
