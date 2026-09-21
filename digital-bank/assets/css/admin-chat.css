@@ -29,24 +29,53 @@
      conversation" not clearing, and the active pane fighting the
      empty state for space.
 
-   - Section 5 (NEW): .admin-chat-conversation-body was missing
-     min-height: 0. Flex items default to min-height: auto, which
-     means "never shrink below your own content's natural height" —
-     so `overflow-y: auto` on this element never actually engaged;
-     there was nothing to scroll, the box just kept growing to fit
-     its content instead. This was invisible while admin-chat.js
-     referenced the wrong attachment column (attachment_url instead
-     of the real attachment_path) — no image ever rendered, so the
-     log stayed short enough that the missing scroll never mattered.
-     The moment attachment rendering was fixed and real <img> tags
-     started appearing in the log, there was finally enough content
-     to expose it: the message log grew unbounded, pushing the reply
-     composer down out of view and inflating the whole page's
-     height. min-height: 0 (plus the same fix on the two grid-item
-     panes, .admin-chat-list and .admin-chat-conversation, which had
-     the equivalent default-min-height issue as CSS Grid items) is
-     what actually makes overflow-y: auto do its job — the log now
-     scrolls WITHIN its allotted space instead of expanding past it.
+   - Section 5: .admin-chat-conversation-body was missing
+     min-height: 0. Flex items default to min-height: auto — see the
+     original note further down — min-height: 0 is what makes
+     overflow-y: auto actually engage instead of the box growing to
+     fit its content.
+
+   - Section 8 (NEW — mobile keyboard/layout fix): on mobile, this
+     page previously lived inside the normal admin page flow (topbar
+     + sidebar + content padding), sized with vh-based heights
+     (calc(100vh - ...)). Two real bugs came from that:
+       1. `vh` units on mobile browsers are measured against the
+          LARGEST possible viewport (address bar hidden). The moment
+          you focus the reply textarea and the keyboard opens, iOS/
+          Android shrink the *visual* viewport but `100vh` doesn't
+          change — so every box sized off vh either got shoved
+          upward, clipped, or fought with the keyboard for space,
+          which is exactly the "distorted / disorganised" look.
+       2. The shell was still constrained by the surrounding admin
+          topbar/sidebar chrome, so there was no way for chat to
+          "take over" the screen the way a real chat app does.
+     Fixed by taking the shell out of the document flow entirely on
+     small screens (position: fixed, inset: 0, full viewport), hiding
+     the surrounding admin chrome, and sizing it off a JS-computed
+     --app-vh custom property (see setViewportHeightVar() in
+     admin-chat.js) which tracks window.visualViewport.height —
+     the one measurement that actually reflects the space left over
+     once the keyboard is open. dvh is kept as a same-line fallback
+     for browsers where the JS hasn't run yet (first paint).
+     Also fixed the classic "page distorts on input focus" cause on
+     iOS: any input/textarea with a computed font-size under 16px
+     makes Safari zoom the whole page in on focus (then zoom back out
+     on blur) — that zoom-in-and-settle IS the "disorganised" jump
+     the user is describing. All chat inputs are now pinned to 16px
+     on mobile.
+
+   - Section 9 (NEW — attachment viewer / lightbox): a full-screen
+     in-page "card" for opening images, PDFs, and other files without
+     leaving admin-chat.html or opening a new tab, in the spirit of
+     the iOS Photos full-screen preview. Populated by
+     openAttachmentViewer() in admin-chat.js.
+
+   - Section 3 / 5 (NEW): message-body links (auto-linkified by
+     admin-chat.js's linkifyEscaped()) get their own `.admin-chat-link`
+     styling instead of inheriting the browser's default blue/purple,
+     and attachment file chips now show a small coloured extension
+     badge (PDF, DOC, etc.) instead of a single generic icon for every
+     file type.
 
    Contents:
      0. Hidden-attribute fix
@@ -56,7 +85,9 @@
      4. Conversation pane (empty state, head, presence)
      5. Conversation message log
      6. Reply composer
-     7. Responsive breakpoints
+     7. Responsive breakpoints (tablet — pane layout only)
+     8. Mobile full-screen + keyboard-safe layout (phones)
+     9. Attachment viewer (lightbox)
    ============================================================= */
 
 /* -------------------------------------------------------------
@@ -185,6 +216,7 @@
   flex: 1;
   min-height: 0; /* see FIX LOG — same reasoning as .admin-chat-conversation-body */
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-chat-thread-list {
@@ -447,6 +479,8 @@
      view and inflating the whole page's height. */
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
@@ -462,6 +496,7 @@
   background: var(--ivory);
   color: var(--slate-dark);
   align-self: flex-start;
+  overflow-wrap: anywhere; /* long URLs/tokens shouldn't force horizontal scroll */
 }
 
 .admin-chat-msg--admin {
@@ -489,18 +524,101 @@
   margin-bottom: 0.25rem;
 }
 
+/* Auto-linkified URLs inside message bodies — see linkifyEscaped()
+   in admin-chat.js. Styled distinctly from plain text rather than
+   inheriting the browser's default blue/purple link colors, which
+   clashed with both bubble backgrounds. */
+.admin-chat-link {
+  color: var(--brass);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(181, 138, 68, 0.45);
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.admin-chat-msg--admin .admin-chat-link {
+  color: #f3d9a4;
+  text-decoration-color: rgba(243, 217, 164, 0.5);
+}
+
+.admin-chat-link::after {
+  content: '\2197'; /* ↗ */
+  display: inline-block;
+  margin-left: 0.15em;
+  font-size: 0.8em;
+  opacity: 0.75;
+  text-decoration: none;
+}
+
 /* Attachment bubble contents (image thumbnail or file chip) reuse
    .chat-attachment / .chat-attachment-image / .chat-attachment-file
    / .chat-attachment-file-icon / .chat-attachment-file-name from
    components.css — same visual language as the customer-facing
    chat widget, no need to redeclare them here. See
-   renderAttachmentInto() in admin-chat.js. */
+   renderAttachmentInto() in admin-chat.js. Both are now buttons
+   (not <a> / <img> alone) that open the attachment viewer in
+   section 9, instead of navigating away. */
 .admin-chat-msg .chat-attachment {
   margin-top: 0.3rem;
 }
 
 .admin-chat-msg--admin .chat-attachment-file {
   background: rgba(246, 245, 240, 0.14);
+}
+
+.chat-attachment-image-btn {
+  display: block;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  max-width: 220px;
+}
+
+.chat-attachment-image-btn img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+.chat-attachment-file-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+/* Small coloured extension badge (PDF / DOC / XLS / etc.) shown
+   instead of one generic icon for every non-image attachment, so a
+   PDF actually reads as a PDF in the thread at a glance. */
+.chat-attachment-file-ext {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 0.3rem;
+  border-radius: 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--brass);
+  color: var(--ivory);
+}
+
+.admin-chat-msg--admin .chat-attachment-file-ext {
+  background: rgba(246, 245, 240, 0.85);
+  color: var(--ink);
 }
 
 /* -------------------------------------------------------------
@@ -593,26 +711,21 @@
 }
 
 /* -------------------------------------------------------------
-   7. Responsive breakpoints
+   7. Responsive breakpoints (tablet) — pane layout only.
+   The phone-specific full-screen/keyboard fix lives in section 8.
    ------------------------------------------------------------- */
-@media (max-width: 900px) {
+@media (max-width: 900px) and (min-width: 721px) {
   .admin-chat-shell {
     height: calc(100vh - var(--admin-topbar-h) - 3rem);
   }
 }
 
 @media (max-width: 720px) {
-  .admin-chat-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-    height: calc(100vh - var(--admin-topbar-h) - 2.5rem);
-  }
-
   /* Single-column: show ONE pane at a time. Default (no thread
      selected yet) shows the list; admin-chat.js adds
      .is-conversation-open to .admin-chat-shell on selectThread()
-     and removes it in wireBackToList(), so the back button (shown
-     below) is the only way back to the list on mobile. */
+     and removes it in wireBackToList(), so the back button is the
+     only way back to the list on mobile. */
   .admin-chat-list {
     border-right: none;
   }
@@ -634,16 +747,275 @@
   }
 }
 
-@media (max-width: 480px) {
-  .admin-chat-shell {
-    border-radius: var(--radius-md);
+/* -------------------------------------------------------------
+   8. Mobile full-screen + keyboard-safe layout (phones)
+   -------------------------------------------------------------
+   See FIX LOG for the full explanation. Summary: take the shell
+   fully out of the admin page's flow and pin it to the viewport,
+   sized off --app-vh (set by admin-chat.js from
+   window.visualViewport, which tracks the space actually left once
+   the on-screen keyboard is open) instead of vh/dvh alone. This is
+   what makes the vertical size genuinely fixed — the outer shell
+   never resizes or jumps when an input is focused; only the
+   composer (pinned via flex, section 6) moves to sit above the
+   keyboard, and the message log (flex: 1, min-height: 0) is the
+   only thing that shrinks to make room for it, exactly like a
+   native chat app.
+   ------------------------------------------------------------- */
+@media (max-width: 720px) {
+  html,
+  body.admin-body {
+    overflow-x: hidden; /* belt-and-braces: nothing on this page can force horizontal scroll */
   }
 
-  .admin-chat-conversation-head {
-    padding: 0.85rem 1rem;
-  }
-
-  .admin-chat-conversation-actions .btn {
+  /* Body chrome (topbar/sidebar) sits behind the chat while it's
+     the active full-screen view — it isn't removed from the DOM
+     (admin-layout.js still needs it for nav state), just visually
+     replaced. */
+  body.admin-body:has(.admin-chat-shell) [data-component="admin-navbar"] {
     display: none;
+  }
+
+  .admin-main {
+    padding: 0;
+  }
+
+  .admin-container {
+    padding: 0;
+    max-width: none;
+  }
+
+  .admin-chat-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    grid-template-columns: 1fr; /* single pane, see section 7 */
+    grid-template-rows: 1fr;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh; /* same-paint fallback before JS runs */
+    height: var(--app-vh, 100dvh); /* keyboard-aware, set by admin-chat.js */
+    min-height: 0;
+    max-height: var(--app-vh, 100dvh);
+    border-radius: 0;
+    border: none;
+    overflow: hidden;
+    /* Respect notches/home-indicator on the OUTER edge only — inner
+       panes keep their own padding untouched so content never sits
+       under the status bar or the iOS home-indicator strip. */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--paper);
+  }
+
+  .admin-chat-list,
+  .admin-chat-conversation {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  /* iOS Safari zooms the whole page in on focus for any text input
+     under 16px, then zooms back out on blur — that zoom-and-settle
+     is the "page distorts when I click the input" symptom. Pinning
+     every chat input/textarea to 16px removes the trigger entirely. */
+  .admin-chat-search input,
+  .admin-chat-conversation-input textarea {
+    font-size: 16px;
+  }
+
+  .admin-chat-conversation-input {
+    padding-bottom: max(0.85rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* -------------------------------------------------------------
+   9. Attachment viewer (lightbox)
+   -------------------------------------------------------------
+   One full-screen overlay, shared by every attachment type. Image:
+   fills the card, pinch/scroll to inspect. PDF: rendered inline via
+   <iframe> at full card size (falls back to the header's "open in
+   new tab" action if the embedded viewer isn't supported). Other
+   files: a simple centered icon/name/size card with a Download
+   button, since there's no reliable private-file inline preview for
+   arbitrary formats. Populated by openAttachmentViewer() in
+   admin-chat.js.
+   ------------------------------------------------------------- */
+.attachment-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.attachment-viewer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 12, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.attachment-viewer-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: 720px;
+  max-height: 100dvh;
+  background: #101014;
+  color: var(--ivory);
+  overflow: hidden;
+}
+
+.attachment-viewer-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  padding-top: max(0.9rem, env(safe-area-inset-top, 0px));
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+}
+
+.attachment-viewer-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.attachment-viewer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.attachment-viewer-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ivory);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.attachment-viewer-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.attachment-viewer-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.attachment-viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 0 max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Image mode */
+.attachment-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  touch-action: pinch-zoom;
+  user-select: none;
+}
+
+/* PDF mode */
+.attachment-viewer-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* Generic file mode */
+.attachment-viewer-filecard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.attachment-viewer-filecard-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-viewer-filecard-icon svg {
+  width: 30px;
+  height: 30px;
+  color: var(--brass);
+}
+
+.attachment-viewer-filecard-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.attachment-viewer-filecard-hint {
+  font-size: 0.8rem;
+  color: rgba(246, 245, 240, 0.6);
+}
+
+.attachment-viewer-filecard-download {
+  margin-top: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--radius-sm);
+  background: var(--brass);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.attachment-viewer-error {
+  padding: 2rem;
+  text-align: center;
+  color: rgba(246, 245, 240, 0.75);
+  font-size: 0.85rem;
+}
+
+/* On phones the card takes the entire screen edge-to-edge, matching
+   the rest of section 8's full-screen treatment. */
+@media (max-width: 720px) {
+  .attachment-viewer-card {
+    max-width: 100vw;
+    max-height: 100dvh;
+    max-height: var(--app-vh, 100dvh);
   }
 }
