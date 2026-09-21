@@ -13,6 +13,33 @@
 
    FIX LOG (this revision)
    ------------------------
+   - MOBILE KEYBOARD/LAYOUT FIX: added setViewportHeightVar(), driven
+     by window.visualViewport, which writes a --app-vh custom
+     property that admin-chat.css's mobile section (8) sizes the
+     whole shell off. This is what actually keeps the shell's height
+     fixed when the on-screen keyboard opens/closes on the reply
+     textarea or the search input — see admin-chat.css's FIX LOG for
+     the full explanation of why vh/dvh alone weren't enough.
+   - ATTACHMENT VIEWER (NEW): renderAttachmentInto() no longer opens
+     images/PDFs/files via window.open() or a bare <a>. Every
+     attachment is now a <button> that calls openAttachmentViewer(),
+     which fills in the new #attachment-viewer overlay (markup in
+     admin-chat.html, styles in admin-chat.css section 9) with the
+     right body for the attachment's type — inline <img>, inline
+     <iframe> for PDFs, or a name/size/download card for anything
+     else — so attachments open as an in-page "card" instead of
+     leaving the admin panel or dropping the person into a bare new
+     tab.
+   - LINK AUTO-DETECTION (NEW): messageHtml()'s body text now runs
+     through linkifyEscaped() after escaping, turning any
+     http(s):// URL a visitor or admin types into a proper styled,
+     clickable link (admin-chat.css's .admin-chat-link) instead of
+     inert plain text.
+   - Everything below this point (attachment SCHEME, KNOWN GAPS,
+     etc.) is carried over unchanged from the previous revision.
+
+   PRIOR FIX LOG
+   -------------
    - ATTACHMENT SCHEME CORRECTED: this file previously read/wrote
      attachment_url/attachment_type/attachment_name and used
      getPublicUrl() against a public bucket. That never matched the
@@ -47,10 +74,12 @@
       filter is currently loaded — getting a live open-count while
       viewing Closed/All would need a second, separate count query.
       Minor, but not a real unread-style badge across tabs.
-   2. Uniform attachment image sizing (consistent width/margin) is
-      meant to live in components.css alongside .chat-attachment-image
-      (shared with the customer widget) — not added here, pending
-      that file.
+   2. The PDF preview in the attachment viewer uses a plain <iframe>
+      pointed at the signed URL. That renders natively in desktop
+      browsers and in-app on recent mobile Safari/Chrome, but some
+      embedded/in-app webviews (e.g. certain in-app browsers) don't
+      render PDFs in an iframe at all — the header's "open in new
+      tab" button is the fallback for that case, not just a nicety.
 
    ROLE: any of support/admin/superadmin can access this page (the
    requireAdmin() default), matching admin-support.html's own tier.
@@ -95,6 +124,8 @@ async function init() {
   wireStatusToggle();
   wireAttach();
   wireBackToList();
+  wireAttachmentViewer();
+  wireViewportHeight();
 
   await loadThreads();
   subscribeToRealtime();
@@ -105,6 +136,35 @@ async function init() {
     if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     if (presenceTickInterval) clearInterval(presenceTickInterval);
   });
+}
+
+/* -----------------------------------------------------------
+   1b. Keyboard-safe viewport height (mobile)
+   -----------------------------------------------------------
+   `100vh`/`100dvh` in CSS is measured against the layout viewport,
+   which on iOS/Android does NOT shrink when the on-screen keyboard
+   opens — only window.visualViewport does. admin-chat.css's mobile
+   section sizes .admin-chat-shell (and the attachment viewer) off
+   the --app-vh custom property this sets, so the shell's actual
+   pixel height tracks whatever space the keyboard has left, instead
+   of overflowing/getting shoved around when an input is focused.
+   Falls back gracefully: browsers without visualViewport just keep
+   using the plain `100dvh` already baked into the CSS as a fallback
+   value, so nothing breaks where this API is unavailable.
+   ----------------------------------------------------------- */
+function wireViewportHeight() {
+  setViewportHeightVar();
+  window.addEventListener('resize', setViewportHeightVar);
+  window.addEventListener('orientationchange', setViewportHeightVar);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setViewportHeightVar);
+    window.visualViewport.addEventListener('scroll', setViewportHeightVar);
+  }
+}
+
+function setViewportHeightVar() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-vh', `${h}px`);
 }
 
 /* -----------------------------------------------------------
@@ -405,7 +465,10 @@ function messageHtml(m) {
 
   const label = m.sender_type === 'admin' ? 'You' : m.sender_type === 'system' ? 'System' : 'Visitor';
 
-  const bodyHtml = m.body ? `<div class="admin-chat-msg-body">${escapeHtml(m.body)}</div>` : '';
+  // escapeHtml() first (never trust message content), THEN linkify —
+  // linkifyEscaped() only ever wraps text already safe to insert, it
+  // never introduces raw user input into the DOM.
+  const bodyHtml = m.body ? `<div class="admin-chat-msg-body">${linkifyEscaped(escapeHtml(m.body))}</div>` : '';
   // Empty slot now, filled asynchronously by renderAttachmentInto()
   // once its signed URL resolves — see renderMessages()/appendMessage().
   const attachmentSlotHtml = m.attachment_path ? `<div class="admin-chat-msg-attachment-slot"></div>` : '';
@@ -421,9 +484,9 @@ function messageHtml(m) {
 // Resolves a signed URL for the attachment (private bucket — see
 // getAttachmentSignedUrl() in supabase/chat.js, shared with the
 // visitor-facing widget so both sides mint URLs the same way) and
-// fills in an inline image or a download chip. Reuses the
-// .chat-attachment* classes from components.css, same as
-// chat-widget.js does on the customer side.
+// renders it as a clickable image thumbnail or a file chip. Both
+// open the shared attachment viewer (section 6b) instead of
+// navigating away, so "click the image" stays on this page.
 async function renderAttachmentInto(slot, m) {
   const isImage = (m.attachment_type || '').startsWith('image/');
   const { data: url, error } = await getAttachmentSignedUrl(m.attachment_path);
@@ -436,19 +499,42 @@ async function renderAttachmentInto(slot, m) {
   if (isImage) {
     slot.innerHTML = `
       <div class="chat-attachment">
-        <img class="chat-attachment-image" src="${escapeHtml(url)}" alt="${escapeHtml(m.attachment_name || 'Attachment')}" loading="lazy">
+        <button type="button" class="chat-attachment-image-btn" aria-label="View image">
+          <img class="chat-attachment-image" src="${escapeHtml(url)}" alt="${escapeHtml(m.attachment_name || 'Attachment')}" loading="lazy">
+        </button>
       </div>`;
-    slot.querySelector('img')?.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+    slot.querySelector('.chat-attachment-image-btn')?.addEventListener('click', () => {
+      openAttachmentViewer({ type: 'image', url, name: m.attachment_name || 'Photo' });
+    });
     return;
   }
 
+  const ext = fileExtension(m.attachment_name, m.attachment_type);
+
   slot.innerHTML = `
     <div class="chat-attachment">
-      <a class="chat-attachment-file" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
-        <svg class="chat-attachment-file-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3.5h9l3 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <button type="button" class="chat-attachment-file chat-attachment-file-btn">
+        <span class="chat-attachment-file-ext">${escapeHtml(ext)}</span>
         <span class="chat-attachment-file-name">${escapeHtml(m.attachment_name || 'Document')}</span>
-      </a>
+      </button>
     </div>`;
+
+  slot.querySelector('.chat-attachment-file-btn')?.addEventListener('click', () => {
+    const type = (m.attachment_type || '') === 'application/pdf' ? 'pdf' : 'file';
+    openAttachmentViewer({ type, url, name: m.attachment_name || 'Document' });
+  });
+}
+
+// Short (≤4-char) badge text for the file-chip: prefer the real
+// filename extension, fall back to a guess from the mime type.
+function fileExtension(name, mimeType) {
+  const fromName = (name || '').split('.').pop();
+  if (fromName && fromName.length <= 4 && fromName !== name) return fromName.toUpperCase();
+  if ((mimeType || '').includes('/')) {
+    const sub = mimeType.split('/').pop();
+    return sub.slice(0, 4).toUpperCase();
+  }
+  return 'FILE';
 }
 
 async function markThreadMessagesRead(threadId) {
@@ -508,6 +594,75 @@ function wireReplyForm() {
     input.value = '';
     input.style.height = 'auto';
   });
+}
+
+/* -----------------------------------------------------------
+   6b. Attachment viewer (lightbox)
+   -----------------------------------------------------------
+   One shared full-screen overlay (markup in admin-chat.html,
+   styles in admin-chat.css section 9). openAttachmentViewer()
+   fills in the right body for the attachment's type and shows it;
+   closeAttachmentViewer() tears it back down. Wired once in
+   wireAttachmentViewer() at boot: backdrop click, the header's
+   close button, and Escape all close it.
+   ----------------------------------------------------------- */
+function wireAttachmentViewer() {
+  const viewer = $('[data-attachment-viewer]');
+  if (!viewer) return;
+
+  $$('[data-attachment-viewer-close]', viewer).forEach((el) => {
+    el.addEventListener('click', closeAttachmentViewer);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !viewer.hidden) closeAttachmentViewer();
+  });
+}
+
+function openAttachmentViewer({ type, url, name }) {
+  const viewer = $('[data-attachment-viewer]');
+  const body = $('[data-attachment-viewer-body]');
+  const nameEl = $('[data-attachment-viewer-name]');
+  const downloadLink = $('[data-attachment-viewer-download]');
+  const openTabLink = $('[data-attachment-viewer-open-tab]');
+  if (!viewer || !body) return;
+
+  nameEl.textContent = name || 'Attachment';
+  downloadLink.href = url;
+  downloadLink.setAttribute('download', name || '');
+
+  if (type === 'image') {
+    openTabLink.hidden = true;
+    body.innerHTML = `<img class="attachment-viewer-image" src="${escapeHtml(url)}" alt="${escapeHtml(name || 'Attachment')}">`;
+  } else if (type === 'pdf') {
+    openTabLink.hidden = false;
+    openTabLink.href = url;
+    body.innerHTML = `<iframe class="attachment-viewer-frame" src="${escapeHtml(url)}" title="${escapeHtml(name || 'Document')}"></iframe>`;
+  } else {
+    openTabLink.hidden = false;
+    openTabLink.href = url;
+    body.innerHTML = `
+      <div class="attachment-viewer-filecard">
+        <span class="attachment-viewer-filecard-icon">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3.5h9l3 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="attachment-viewer-filecard-name">${escapeHtml(name || 'Document')}</span>
+        <span class="attachment-viewer-filecard-hint">Preview isn't available for this file type</span>
+        <a class="attachment-viewer-filecard-download" href="${escapeHtml(url)}" download="${escapeHtml(name || '')}">Download</a>
+      </div>`;
+  }
+
+  viewer.hidden = false;
+  document.body.classList.add('attachment-viewer-open');
+}
+
+function closeAttachmentViewer() {
+  const viewer = $('[data-attachment-viewer]');
+  const body = $('[data-attachment-viewer-body]');
+  if (!viewer) return;
+  viewer.hidden = true;
+  if (body) body.innerHTML = ''; // stop any playing/loading media (esp. the PDF iframe)
+  document.body.classList.remove('attachment-viewer-open');
 }
 
 /* -----------------------------------------------------------
@@ -696,14 +851,11 @@ function wireAttach() {
 /* -----------------------------------------------------------
    10. Mobile: back-to-list button
    -----------------------------------------------------------
-   admin-chat.html doesn't currently have a dedicated "back" button
-   in the conversation head — on mobile, tapping a thread swaps to
-   the conversation pane (admin-chat.css's is-conversation-open),
-   but there's no way back to the list without this. Wires up IF a
-   [data-conversation-back] element exists; otherwise a no-op, so
-   this doesn't error against the current markup. Flagging: add
-   <button data-conversation-back> to admin-chat.html's conversation
-   header for this to do anything on mobile.
+   admin-chat.html has a [data-conversation-back] button in the
+   conversation header; wireBackToList() removes
+   .is-conversation-open from .admin-chat-shell, which (per
+   admin-chat.css sections 7-8) swaps the visible pane back to the
+   thread list on phones.
    ----------------------------------------------------------- */
 function wireBackToList() {
   $('[data-conversation-back]')?.addEventListener('click', () => {
@@ -729,6 +881,23 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+// Turns bare http(s):// URLs inside already-escaped text into real
+// links. MUST be called AFTER escapeHtml() — it only ever wraps text
+// that's already safe to drop into innerHTML, never raw user input,
+// so it can't be used to smuggle markup in.
+const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
+
+function linkifyEscaped(escapedText) {
+  return escapedText.replace(URL_PATTERN, (match) => {
+    // Keep trailing punctuation (a period ending the sentence, a
+    // closing paren, etc.) OUTSIDE the link, same as most chat apps.
+    const trailing = (match.match(/[).,!?;:'"]+$/) || [''])[0];
+    const core = trailing ? match.slice(0, -trailing.length) : match;
+    if (!core) return match;
+    return `<a class="admin-chat-link" href="${core}" target="_blank" rel="noopener noreferrer">${core}</a>${trailing}`;
+  });
 }
 
 function formatClockTime(iso) {
