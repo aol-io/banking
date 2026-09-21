@@ -771,9 +771,16 @@
   /* Body chrome (topbar/sidebar) sits behind the chat while it's
      the active full-screen view — it isn't removed from the DOM
      (admin-layout.js still needs it for nav state), just visually
-     replaced. */
+     replaced. Two hiding mechanisms stacked for robustness:
+     .is-admin-chat-page is a class admin-chat.js applies directly
+     (works in every browser, doesn't depend on :has() support or on
+     admin-navbar's own markup/specificity); the :has() rule is a
+     same-paint fallback in case that JS hasn't run yet. Either way
+     !important is needed since the navbar component may ship its
+     own more specific selectors for its fixed/sticky positioning. */
+  body.is-admin-chat-page [data-component="admin-navbar"],
   body.admin-body:has(.admin-chat-shell) [data-component="admin-navbar"] {
-    display: none;
+    display: none !important;
   }
 
   .admin-main {
@@ -788,7 +795,12 @@
   .admin-chat-shell {
     position: fixed;
     inset: 0;
-    z-index: 40;
+    /* Deliberately way above anything this stylesheet doesn't
+       control (a fixed/sticky admin topbar, a mobile drawer, etc.)
+       — belt-and-braces alongside the hide rule just above, so the
+       chat visually and interactively covers the whole screen even
+       if the navbar somehow keeps rendering. */
+    z-index: 2147483000;
     grid-template-columns: 1fr; /* single pane, see section 7 */
     grid-template-rows: 1fr;
     width: 100vw;
@@ -843,7 +855,7 @@
 .attachment-viewer {
   position: fixed;
   inset: 0;
-  z-index: 900;
+  z-index: 2147483647; /* max — must stay above .admin-chat-shell's own high z-index */
   display: flex;
   align-items: center;
   justify-content: center;
