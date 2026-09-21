@@ -82,7 +82,7 @@
    assets/js/translation.js.
    ============================================================= */
 
-import { getCurrentUser, updateUserPassword, verifyCurrentPassword, requestPasswordReset } from '../supabase/auth.js';
+import { getCurrentUser, updateUserPassword, verifyCurrentPassword, requestPasswordReset, requireAuth } from '../supabase/auth.js';
 import {
   getMyProfile,
   getMyAccounts,
@@ -1739,3 +1739,55 @@ function initKyc() {
   reloadKyc();
   subscribeToKycUpdates(currentUser.id);
 }
+
+
+/* -----------------------------------------------------------
+   Bootstrap — nothing above this point runs on its own.
+   ----------------------------------------------------------- */
+async function init() {
+  // Wiring that doesn't depend on the signed-in user.
+  screenStack = initScreenStack();
+  wirePasswordToggles();
+  wirePasswordForms();
+  wireForgotPassword();
+  wireTwoFactorPicker();
+  wireNotificationToggles();
+  wireLoginSessionPreference();
+  wireLinkedId();
+
+  // requireAuth() is the app's single auth guard: it already
+  // redirects to login if there's no session, blocks suspended/
+  // closed accounts, handles force-logout, and reveals the page.
+  // If it returns null, it has already redirected — just stop.
+  const user = await requireAuth();
+  if (!user) return;
+  currentUser = user;
+
+  const { data: profile, error: profileError } = await getMyProfile(user.id);
+  if (profileError) console.error('[Meridian] Failed to load profile:', profileError);
+  currentProfile = profile;
+
+  populateBanner(user, profile);
+  populatePersonalInfo(user, profile);
+  populateAccountInfo(profile);
+  renderTierBadges();
+
+  const { data: accounts, error: accountsError } = await getMyAccounts(user.id);
+  if (accountsError) console.error('[Meridian] Failed to load accounts:', accountsError);
+  wireAccountNumberToggle(profile, accounts || []);
+
+  populateActivityPlaceholder();
+  await loadOverviewSummary(user.id, accounts || []);
+
+  await loadSessions(user.id);
+  await loadFaceIdStatus(user.id);
+
+  // This is what was stuck on "Loading your verification status…"
+  initKyc();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch((err) => {
+    console.error('[Meridian] profile init failed:', err);
+  });
+});
