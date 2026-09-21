@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Live Chat — Meridian Admin</title>
 <link rel="stylesheet" href="../../assets/css/style.css">
@@ -91,12 +91,11 @@
         <div class="admin-chat-conversation-active" data-conversation-active hidden>
 
           <header class="admin-chat-conversation-head">
-            <!-- Mobile-only: returns to the thread list. Hidden on
-                 desktop via admin-chat.css (only shown ≤720px,
-                 where the two panes swap instead of sitting
-                 side-by-side). admin-chat.js's wireBackToList()
-                 removes .is-conversation-open from .admin-chat-shell
-                 on click. -->
+            <!-- Mobile-only: returns to the thread list. admin-chat.js's
+                 wireBackToList() removes .is-conversation-open from
+                 .admin-chat-shell on click, which (in the new mobile
+                 full-screen mode) swaps the visible pane back to the
+                 thread list. -->
             <button type="button" class="admin-chat-back-btn" data-conversation-back aria-label="Back to conversations">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M12.5 4.5 6 10l6.5 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
@@ -144,6 +143,39 @@
 
   </div>
 </main>
+
+<!-- =====================================================
+     ATTACHMENT VIEWER (new) — a single reusable full-screen
+     "card" overlay, in the same spirit as the iOS Photos
+     preview: tapping any attachment (image, PDF, or other
+     file) opens it here, in-page, instead of navigating away
+     or opening a new tab. admin-chat.js decides which body
+     markup to inject (image / pdf / generic file) based on
+     attachment_type. See openAttachmentViewer() in admin-chat.js
+     and section 8 of admin-chat.css.
+     ===================================================== -->
+<div class="attachment-viewer" data-attachment-viewer hidden>
+  <div class="attachment-viewer-backdrop" data-attachment-viewer-close></div>
+  <div class="attachment-viewer-card" data-attachment-viewer-card role="dialog" aria-modal="true" aria-label="Attachment preview">
+    <header class="attachment-viewer-head">
+      <span class="attachment-viewer-name" data-attachment-viewer-name>Attachment</span>
+      <div class="attachment-viewer-head-actions">
+        <a class="attachment-viewer-icon-btn" data-attachment-viewer-open-tab target="_blank" rel="noopener noreferrer" aria-label="Open in new tab" hidden>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 4.5H4.5v11h11V12M12 3.5h4.5V8M16.2 3.8 9.5 10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="attachment-viewer-icon-btn" data-attachment-viewer-download download aria-label="Download">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9.5M6 9l4 4 4-4M4 16.5h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <button type="button" class="attachment-viewer-icon-btn" data-attachment-viewer-close aria-label="Close">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="attachment-viewer-body" data-attachment-viewer-body>
+      <!-- Filled dynamically by openAttachmentViewer() -->
+    </div>
+  </div>
+</div>
 
 <script type="module" src="admin-chat.js"></script>
 </body>
