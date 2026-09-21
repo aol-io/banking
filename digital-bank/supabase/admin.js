@@ -434,7 +434,7 @@ export async function rejectKyc(userId, reason) {
    4b. KYC documents — admin-kyc.html
    ----------------------------------------------------------- */
 const IDENTITY_BUCKET = 'identity-documents';
-const SUBMITTED_COLUMN = 'created_at';
+const SUBMITTED_COLUMN = 'submitted_at';
 
 // user_id and reviewed_by both point at user_profiles, so the embed
 // has to name the foreign key it follows.
