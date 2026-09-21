@@ -1,0 +1,357 @@
+/* =============================================================
+   MERIDIAN — Admin panel
+   assets/css/admin-kyc.css
+
+   Loaded after admin.css on pages/admin/admin-kyc.html only.
+   Everything here is scoped under .kyc-page or uses a kyc- prefix,
+   so it adds to admin.css (table, drawer, modal, stat cards) and
+   never restyles it.
+
+   Neutral tones are derived from the text colour with color-mix(),
+   so they follow whatever text colour admin.css sets. The status
+   hues (amber, green, red, blue) assume a light page background.
+   ============================================================= */
+
+.kyc-page {
+  --kyc-line: color-mix(in srgb, currentColor 14%, transparent);
+  --kyc-soft: color-mix(in srgb, currentColor 5%, transparent);
+  --kyc-muted: color-mix(in srgb, currentColor 62%, transparent);
+
+  --kyc-warning-fg: #8a5a0b;
+  --kyc-warning-bg: rgba(217, 154, 35, 0.16);
+  --kyc-success-fg: #17663f;
+  --kyc-success-bg: rgba(31, 138, 84, 0.14);
+  --kyc-danger-fg: #a83329;
+  --kyc-danger-bg: rgba(192, 69, 59, 0.12);
+  --kyc-info-fg: #254f93;
+  --kyc-info-bg: rgba(43, 95, 171, 0.12);
+  --kyc-teal-fg: #0f6b66;
+  --kyc-teal-bg: rgba(20, 150, 140, 0.13);
+  --kyc-violet-fg: #5b3f9a;
+  --kyc-violet-bg: rgba(106, 76, 175, 0.12);
+
+  --kyc-focus: rgba(43, 95, 171, 0.55);
+}
+
+/* -----------------------------------------------------------
+   Wider drawer — the document preview needs the room
+   ----------------------------------------------------------- */
+.kyc-page .admin-drawer {
+  width: min(600px, 100vw);
+  max-width: 100vw;
+}
+
+/* -----------------------------------------------------------
+   Toolbar: category filter
+   ----------------------------------------------------------- */
+.kyc-filter {
+  display: inline-flex;
+  align-items: center;
+}
+
+.kyc-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 2.5rem;
+  padding: 0.5rem 2.1rem 0.5rem 0.85rem;
+  border: 1px solid var(--kyc-line);
+  border-radius: 10px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23697386' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 0.95rem;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.kyc-select:focus-visible,
+.kyc-link-btn:focus-visible {
+  outline: 2px solid var(--kyc-focus);
+  outline-offset: 2px;
+}
+
+/* -----------------------------------------------------------
+   Queue table: document cell
+   ----------------------------------------------------------- */
+.kyc-doc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.kyc-doc-name {
+  font-weight: 500;
+}
+
+/* -----------------------------------------------------------
+   Chips (document category) and pills (review status)
+   ----------------------------------------------------------- */
+.kyc-chip {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.kyc-chip--bvn { color: var(--kyc-info-fg); background: var(--kyc-info-bg); }
+.kyc-chip--identity { color: var(--kyc-teal-fg); background: var(--kyc-teal-bg); }
+.kyc-chip--address { color: var(--kyc-violet-fg); background: var(--kyc-violet-bg); }
+
+.kyc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.kyc-pill::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.kyc-pill--warning { color: var(--kyc-warning-fg); background: var(--kyc-warning-bg); }
+.kyc-pill--success { color: var(--kyc-success-fg); background: var(--kyc-success-bg); }
+.kyc-pill--danger { color: var(--kyc-danger-fg); background: var(--kyc-danger-bg); }
+.kyc-pill--info { color: var(--kyc-info-fg); background: var(--kyc-info-bg); }
+.kyc-pill--neutral { color: var(--kyc-muted); background: var(--kyc-soft); }
+
+/* -----------------------------------------------------------
+   Drawer: detail rows
+   ----------------------------------------------------------- */
+.kyc-detail-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.kyc-detail-sub {
+  font-size: 0.78rem;
+  color: var(--kyc-muted);
+}
+
+.kyc-hint {
+  margin: 0.85rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--kyc-muted);
+}
+
+/* Match / mismatch marker under a submitted value */
+.kyc-check {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.kyc-check::before {
+  font-weight: 700;
+}
+
+.kyc-check--match { color: var(--kyc-success-fg); }
+.kyc-check--match::before { content: "✓"; }
+
+.kyc-check--mismatch { color: var(--kyc-danger-fg); }
+.kyc-check--mismatch::before { content: "!"; }
+
+/* ID number with reveal */
+.kyc-secret-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+
+.kyc-secret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.kyc-link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.kyc-link-btn:hover { opacity: 1; }
+
+/* -----------------------------------------------------------
+   Drawer: file preview
+   ----------------------------------------------------------- */
+.kyc-file-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--kyc-line);
+  border-radius: 12px;
+  background: var(--kyc-soft);
+}
+
+.kyc-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.kyc-file-note {
+  font-size: 0.8rem;
+  color: var(--kyc-muted);
+}
+
+.kyc-file-image {
+  display: block;
+  width: 100%;
+  max-height: 440px;
+  object-fit: contain;
+  border: 1px solid var(--kyc-line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* -----------------------------------------------------------
+   Drawer: other submissions
+   ----------------------------------------------------------- */
+.kyc-doc-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kyc-doc-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--kyc-line);
+  border-radius: 10px;
+}
+
+.kyc-doc-list-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.kyc-doc-list-meta strong {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.kyc-doc-list-meta span {
+  font-size: 0.78rem;
+  color: var(--kyc-muted);
+}
+
+/* Three decision buttons need to wrap on narrow drawers */
+.kyc-page .admin-drawer-footer {
+  flex-wrap: wrap;
+}
+
+/* -----------------------------------------------------------
+   Decision modal
+   ----------------------------------------------------------- */
+.kyc-modal-doc {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+}
+
+.kyc-modal-doc div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.kyc-modal-doc dt {
+  color: var(--kyc-muted);
+  font-size: 0.85rem;
+}
+
+.kyc-modal-doc dd {
+  margin: 0;
+  font-weight: 500;
+  text-align: right;
+}
+
+.kyc-effect {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: var(--kyc-soft);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.kyc-effect:empty {
+  display: none;
+}
+
+.kyc-modal-error {
+  margin: 0 0 1rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--kyc-danger-fg);
+}
+
+.kyc-modal-error[hidden] {
+  display: none;
+}
+
+/* -----------------------------------------------------------
+   Small screens
+   ----------------------------------------------------------- */
+@media (max-width: 640px) {
+  .kyc-select {
+    width: 100%;
+  }
+
+  .kyc-filter {
+    width: 100%;
+  }
+
+  .kyc-page .admin-drawer-footer .btn {
+    flex: 1 1 100%;
+  }
+
+  .kyc-modal-doc div {
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .kyc-modal-doc dd {
+    text-align: left;
+  }
+}
