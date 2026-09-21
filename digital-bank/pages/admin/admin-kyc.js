@@ -25,6 +25,16 @@
 
    Depends on four helpers added to supabase/admin.js — see
    admin-identity-additions.js.
+
+   FIX LOG
+   -------
+   - openDrawer()/closeDrawer(): admin.css's drawer visibility rules
+     (.admin-drawer-overlay / .admin-drawer-overlay.is-open) key off
+     an `.is-open` class, not the `aria-hidden` attribute. This file
+     was only ever toggling `aria-hidden`, so the drawer was built
+     and populated correctly but stayed permanently
+     opacity:0/visibility:hidden — no console error, nothing visible.
+     Now toggles `.is-open` alongside `aria-hidden` (kept for a11y).
    ============================================================= */
 
 import { requireAdmin, canAccess } from '../../assets/js/admin/admin-guard.js';
@@ -305,7 +315,9 @@ function wireDrawer() {
 }
 
 function closeDrawer() {
-  $('#kyc-drawer-overlay').setAttribute('aria-hidden', 'true');
+  const overlay = $('#kyc-drawer-overlay');
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
   state.activeDocId = null;
   state.activeUserId = null;
   state.activeDoc = null;
@@ -324,7 +336,10 @@ async function openDrawer(docId) {
   $('#kyc-drawer-subtitle').textContent = row.applicant?.email || '—';
   $('#kyc-drawer-avatar').textContent = getInitials(name);
   $('#kyc-drawer-body').innerHTML = `<p class="kyc-hint">Loading…</p>`;
-  $('#kyc-drawer-overlay').setAttribute('aria-hidden', 'false');
+
+  const overlay = $('#kyc-drawer-overlay');
+  overlay.classList.add('is-open');
+  overlay.setAttribute('aria-hidden', 'false');
   $('#kyc-drawer-close').focus();
 
   const [detail, docsResult] = await Promise.all([
@@ -631,6 +646,7 @@ function openDecisionModal(decision) {
   submitBtn.disabled = false;
 
   hideModalError();
+  $('#decision-modal').classList.add('is-open');
   $('#decision-modal').setAttribute('aria-hidden', 'false');
   (showDetails ? $('#decision-full-name') : reasonInput).focus();
 }
@@ -642,6 +658,7 @@ function needsDetails(cfg, doc) {
 }
 
 function closeDecisionModal() {
+  $('#decision-modal').classList.remove('is-open');
   $('#decision-modal').setAttribute('aria-hidden', 'true');
   state.pendingDecision = null;
 }
