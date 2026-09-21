@@ -244,7 +244,7 @@ async function loadQueue() {
 function renderSummary() {
   $('#stat-pending').textContent = state.total.toLocaleString('en-US');
   const oldest = state.page === 1 ? state.rows[0] : null;
-  $('#stat-oldest').textContent = oldest ? formatTimestamp(oldest.created_at) : state.total ? '—' : 'None';
+  $('#stat-oldest').textContent = oldest ? formatTimestamp(oldest.submitted_at) : state.total ? '—' : 'None';
 }
 
 function renderTable() {
@@ -278,7 +278,7 @@ function renderTable() {
               ${categoryChip(row.document_category)}
             </div>
           </td>
-          <td>${formatTimestamp(row.created_at)}</td>
+          <td>${formatTimestamp(row.submitted_at)}</td>
           <td class="admin-table-actions">
             <button type="button" class="btn btn-ghost btn-sm" data-open-kyc="${escapeHtml(row.id)}">Review</button>
           </td>
@@ -373,7 +373,7 @@ function renderDrawer({ profile, doc, docs }) {
       ${detailRow('Type', escapeHtml(typeLabel))}
       ${detailRow('Category', `${categoryChip(category)}${meta.tier ? `<span class="kyc-detail-sub">Counts toward Tier ${meta.tier}</span>` : ''}`)}
       ${detailRow('Status', statusPill(doc.status))}
-      ${detailRow('Submitted', escapeHtml(formatTimestamp(doc.created_at)))}
+      ${detailRow('Submitted', escapeHtml(formatTimestamp(doc.submitted_at)))}
       ${!isPending && doc.reviewed_at ? detailRow('Reviewed', escapeHtml(formatTimestamp(doc.reviewed_at))) : ''}
       ${doc.rejection_reason ? detailRow('Reason', escapeHtml(doc.rejection_reason)) : ''}
     </section>`;
@@ -453,7 +453,7 @@ function renderDrawer({ profile, doc, docs }) {
               <li>
                 <div class="kyc-doc-list-meta">
                   <strong>${escapeHtml(DOCUMENT_LABELS[d.document_type] || d.document_type || '—')}</strong>
-                  <span>${escapeHtml(formatTimestamp(d.created_at))}</span>
+                  <span>${escapeHtml(formatTimestamp(d.submitted_at))}</span>
                 </div>
                 ${statusPill(d.status)}
               </li>`
