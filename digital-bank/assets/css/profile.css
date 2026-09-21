@@ -1767,3 +1767,324 @@
     font-size: 1.15rem;
   }
 }
+
+
+
+/* -------------------------------------------------------------
+   23b. Verification stepper (Account limits > Upload documents)
+   -----------------------------------------------------------
+   Rendered entirely by profile.js's renderKyc() into #kyc-flow,
+   which ensureKycContainer() injects inside #screen-limits-upload
+   (the legacy .document-upload-form card above stays in the DOM,
+   hidden, so its own styling in section 23 is untouched).
+   ------------------------------------------------------------- */
+.kyc-card {
+  margin-bottom: 1rem;
+}
+
+.kyc-card:last-child {
+  margin-bottom: 0;
+}
+
+.kyc-card--loading {
+  text-align: center;
+  color: var(--slate);
+}
+
+/* ---- Overview: progress bar + tier badge ---- */
+.kyc-tier-badge {
+  flex-shrink: 0;
+}
+
+.kyc-progress {
+  display: flex;
+  gap: 6px;
+  margin-top: 0.5rem;
+}
+
+.kyc-progress-seg {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background-color 0.2s ease;
+}
+
+.kyc-progress-seg.is-done {
+  background: var(--green);
+}
+
+.kyc-progress-seg.is-active {
+  background: var(--amber);
+}
+
+.kyc-progress-text {
+  margin-top: 0.6rem;
+  margin-bottom: 0;
+}
+
+/* ---- Verified step (collapsed row) ---- */
+.kyc-step--verified {
+  padding: 1.25rem 1.75rem;
+}
+
+.kyc-step--verified .profile-card-head {
+  margin-bottom: 0.15rem;
+}
+
+.kyc-step--verified .profile-card-desc {
+  margin-bottom: 0;
+}
+
+/* ---- Pending / all-complete: icon + heading layout ---- */
+.kyc-submitted {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.kyc-step--complete .kyc-submitted,
+.kyc-step--pending .kyc-submitted:last-child {
+  margin-bottom: 0;
+}
+
+.kyc-submitted-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kyc-submitted-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.kyc-submitted-icon--pending {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.kyc-submitted-icon--done {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.kyc-submitted .profile-card-head {
+  margin-bottom: 0.3rem;
+}
+
+.kyc-submitted h3 {
+  font-size: 1.05rem;
+  outline: none; /* focused programmatically via data-kyc-focus, not by pointer */
+}
+
+/* ---- Pending step: mini timeline ---- */
+.kyc-timeline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kyc-timeline li {
+  flex: 1;
+  position: relative;
+  text-align: center;
+  padding-top: 1.1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--slate);
+}
+
+.kyc-timeline li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--line);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.kyc-timeline li::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: calc(50% + 10px);
+  width: calc(100% - 10px);
+  height: 2px;
+  background: var(--line);
+}
+
+.kyc-timeline li:last-child::after {
+  display: none;
+}
+
+.kyc-timeline li.is-done::before {
+  background: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+
+.kyc-timeline li.is-done::after {
+  background: var(--green);
+}
+
+.kyc-timeline li.is-current {
+  color: var(--amber);
+}
+
+.kyc-timeline li.is-current::before {
+  background: var(--amber);
+  box-shadow: 0 0 0 1px var(--amber);
+}
+
+/* ---- Pending step: submission summary ---- */
+.kyc-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.kyc-summary > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.kyc-summary dt {
+  font-size: 0.8rem;
+  color: var(--slate);
+}
+
+.kyc-summary dd {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+}
+
+/* ---- Rejected / action-required alert banner ---- */
+.kyc-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  outline: none;
+}
+
+.kyc-alert--danger {
+  background: var(--red-bg);
+  border: 1px solid rgba(192, 69, 59, 0.25);
+}
+
+.kyc-alert--warning {
+  background: var(--amber-bg);
+  border: 1px solid rgba(212, 152, 55, 0.3);
+}
+
+.kyc-alert-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 0.1rem;
+}
+
+.kyc-alert-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.kyc-alert--danger .kyc-alert-icon {
+  color: var(--red);
+}
+
+.kyc-alert--warning .kyc-alert-icon {
+  color: var(--amber);
+}
+
+.kyc-alert strong {
+  display: block;
+  font-size: 0.92rem;
+  color: var(--ink);
+  margin-bottom: 0.35rem;
+}
+
+.kyc-alert-reason {
+  font-size: 0.85rem;
+  color: var(--slate-dark);
+  margin-bottom: 0.35rem;
+}
+
+.kyc-alert-reason span {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.kyc-alert small {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--slate);
+}
+
+/* ---- Form: fixed (single-option) document type row ---- */
+.kyc-fixed-type {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+}
+
+.kyc-fixed-label {
+  font-size: 0.8rem;
+  color: var(--slate);
+}
+
+.kyc-fixed-type strong {
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+/* ---- Form: ID number field with live character counter ---- */
+.kyc-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.kyc-counter {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--slate);
+  flex-shrink: 0;
+}
+
+/* ---- Form: submission-level error + legal line ---- */
+.kyc-form-error {
+  margin-top: 0.25rem;
+}
+
+.kyc-legal {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
