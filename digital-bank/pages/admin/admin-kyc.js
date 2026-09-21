@@ -9,12 +9,16 @@
    submitted details (checked against the applicant's profile), a
    private preview of the uploaded file, and the applicant's other
    submissions. Every outcome goes through one server-side function,
-   admin_review_identity_document(), so this page never writes
-   status, slot or tier itself:
+   admin_process_identity_document() (see admin-kyc-setup.sql), so
+   this page never writes status, slot, tier or account status itself.
+   It wraps the existing admin_review_identity_document() and, for a
+   verification, also raises the tier and activates the account:
 
-     verified         → status = verified, identity docs take the next
-                        Linked ID slot, tier is raised, pending
-                        accounts are activated
+     verified         → the reviewer confirms name / ID number / DOB /
+                        gender (saved on the record), identity docs
+                        take the next Linked ID slot, tier is raised,
+                        pending accounts are activated (BVN and
+                        identity documents only)
      action_required  → reason required, applicant should fix and
                         resubmit
      rejected         → reason required
@@ -74,13 +78,19 @@ const DECISIONS = {
     submit: 'Verify',
     busy: 'Verifying…',
     submitClass: 'btn-primary',
-    reason: 'none',
+    reason: 'optional',
+    reasonLabel: 'Note (optional)',
+    placeholder: 'Recorded with the review',
+    defaultReason: 'Document verified',
+    details: true,
     toast: 'Document verified.',
+    // Mirrors admin_process_identity_document() in admin-kyc-setup.sql
     effect: (doc) => {
-      const meta = CATEGORY_META[doc.document_category];
+      const category = doc.document_category;
+      const meta = CATEGORY_META[category];
       const parts = [`Raises the account to at least Tier ${meta ? meta.tier : '—'}.`];
-      if (doc.document_category === 'identity') parts.push('Uses the next free Linked ID slot.');
-      parts.push('Activates the account if it is still pending.');
+      if (category === 'identity') parts.push('Uses the next free Linked ID slot.');
+      if (category === 'bvn' || category === 'identity') parts.push('Activates the account if it is still pending.');
       return parts.join(' ');
     },
   },
@@ -542,11 +552,28 @@ function wireDecisionModal() {
     const cfg = DECISIONS[decision];
     if (!cfg || !state.activeDocId) return;
 
-    const reason = $('#decision-modal-reason').value.trim();
+    let reason = $('#decision-modal-reason').value.trim();
 
     if (cfg.reason === 'required' && !reason) {
       showModalError('A reason is required.');
       return;
+    }
+    // The database requires a reason for every decision, so a blank
+    // verification note falls back to a default.
+    if (!reason) reason = cfg.defaultReason || '';
+
+    let details = {};
+    if (needsDetails(cfg, state.activeDoc)) {
+      details = {
+        fullName: $('#decision-full-name').value.trim(),
+        idNumber: $('#decision-id-number').value.trim(),
+        dateOfBirth: $('#decision-dob').value,
+        gender: $('#decision-gender').value,
+      };
+      if (!details.fullName || !details.idNumber) {
+        showModalError('Full name and ID number are required to verify this document.');
+        return;
+      }
     }
 
     const submitBtn = $('#decision-modal-submit');
@@ -554,7 +581,7 @@ function wireDecisionModal() {
     submitBtn.textContent = cfg.busy;
     hideModalError();
 
-    const { error } = await reviewIdentityDocument(state.activeDocId, decision, cfg.reason === 'none' ? null : reason);
+    const { error } = await reviewIdentityDocument(state.activeDocId, decision, reason, details);
 
     submitBtn.disabled = false;
     submitBtn.textContent = cfg.submit;
@@ -584,13 +611,18 @@ function openDecisionModal(decision) {
   $('#decision-modal-document').textContent = DOCUMENT_LABELS[doc.document_type] || doc.document_type || '—';
   $('#decision-modal-effect').textContent = cfg.effect(doc);
 
-  const reasonField = $('#decision-reason-field');
   const reasonInput = $('#decision-modal-reason');
-  reasonField.hidden = cfg.reason === 'none';
   reasonInput.value = '';
-  if (cfg.reason !== 'none') {
-    $('#decision-reason-label').textContent = cfg.reasonLabel;
-    reasonInput.placeholder = cfg.placeholder || '';
+  $('#decision-reason-label').textContent = cfg.reasonLabel;
+  reasonInput.placeholder = cfg.placeholder || '';
+
+  const showDetails = needsDetails(cfg, doc);
+  $('#decision-details').hidden = !showDetails;
+  if (showDetails) {
+    $('#decision-full-name').value = doc.full_name || '';
+    $('#decision-id-number').value = doc.id_number || '';
+    $('#decision-dob').value = doc.date_of_birth ? String(doc.date_of_birth).slice(0, 10) : '';
+    $('#decision-gender').value = doc.gender || '';
   }
 
   const submitBtn = $('#decision-modal-submit');
@@ -600,7 +632,13 @@ function openDecisionModal(decision) {
 
   hideModalError();
   $('#decision-modal').setAttribute('aria-hidden', 'false');
-  (cfg.reason === 'none' ? submitBtn : reasonInput).focus();
+  (showDetails ? $('#decision-full-name') : reasonInput).focus();
+}
+
+// Verifying a BVN or identity document saves the confirmed details on the
+// record (the database function overwrites them with whatever is sent).
+function needsDetails(cfg, doc) {
+  return Boolean(cfg?.details && doc && (doc.document_category === 'bvn' || doc.document_category === 'identity'));
 }
 
 function closeDecisionModal() {
