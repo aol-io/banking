@@ -44,6 +44,8 @@ import { requireAdmin, canAccess } from '../../assets/js/admin/admin-guard.js';
 import { initAdminLayout } from '../../assets/js/admin/admin-layout.js';
 import { listTransactions, getTransactionSummary, reverseTransaction } from '../../supabase/admin.js';
 import { $, $$, debounce, formatTimestamp, formatCurrency, getQueryParam } from '../../assets/js/utils.js';
+import { sendTransactionEmail } from '../../assets/js/email.js';
+
 
 const PAGE_SIZE = 25;
 
@@ -439,6 +441,30 @@ function wireReverseModal() {
       errorEl.style.display = 'block';
       submitBtn.disabled = false;
       return;
+    }
+
+    const emailResult = await sendTransactionEmail('reversed', {
+      to_email: tx.customer_email,
+      customer_name: tx.customer_name || 'Customer',
+      email_title: 'A transaction on your account was reversed',
+      email_message: 'This confirms the transaction below has been reversed and funds returned to your account.',
+      preheader_text: `Your transaction ${tx.transaction_reference} was reversed.`,
+      amount_label: 'Amount reversed',
+      amount: formatCurrency(tx.amount, tx.currency),
+      from_label: 'Original sender',
+      from_value: tx.sender_account || 'External',
+      to_label: 'Original receiver',
+      to_value: tx.receiver_account || 'External',
+      reference: tx.transaction_reference,
+      transaction_type: tx.transaction_type,
+      date: formatTimestamp(new Date()),
+      note_label: 'Reason',
+      note_value: reason,
+    });
+
+    if (!emailResult.ok) {
+      console.error('Reversal succeeded but email failed:', emailResult.error);
+      // don't block the UI on this — the reversal itself already succeeded
     }
 
     showToast('Transaction reversed.', 'success');
