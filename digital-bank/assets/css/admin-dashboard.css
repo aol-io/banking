@@ -8,12 +8,15 @@
           attribute relies on.
 
    Everything here is specific to admin-dashboard.html's own
-   markup — the KPI grid and the recent-activity panel — since no
-   other planned admin page currently uses either.
+   markup — the KPI grid, the two-column Recent activity / Quick
+   actions row, and their internals — since no other planned admin
+   page currently uses any of these.
 
    Contents:
      1. KPI grid
-     2. Recent activity panel
+     2. Dashboard grid (Recent activity + Quick actions layout)
+     3. Recent activity panel
+     4. Quick actions panel
    ============================================================= */
 
 /* -------------------------------------------------------------
@@ -35,6 +38,26 @@
   flex-direction: column;
   gap: 0.35rem;
   min-height: 96px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+a.admin-kpi-card:hover {
+  border-color: var(--brass);
+  box-shadow: var(--shadow-card);
+  transform: translateY(-1px);
+}
+
+.admin-kpi-card--emphasize {
+  border-color: rgba(179, 119, 29, 0.35);
+  background: var(--amber-bg);
+}
+
+.admin-kpi-card--emphasize .admin-kpi-value {
+  color: var(--amber);
+}
+
+.admin-kpi-card--muted {
+  opacity: 0.7;
 }
 
 .admin-kpi-card--skeleton {
@@ -76,6 +99,11 @@
   color: var(--ink);
 }
 
+.admin-kpi-value--text {
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
 .admin-inline-error {
   font-size: 0.85rem;
   color: var(--red);
@@ -86,7 +114,18 @@
 }
 
 /* -------------------------------------------------------------
-   2. Recent activity panel
+   2. Dashboard grid — Recent activity (wider) + Quick actions
+   (narrower), side by side on desktop, stacked on smaller screens.
+   ------------------------------------------------------------- */
+.admin-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+/* -------------------------------------------------------------
+   3. Recent activity panel
    ------------------------------------------------------------- */
 .admin-panel {
   background: var(--paper);
@@ -139,6 +178,25 @@
   border-bottom: none;
 }
 
+.admin-activity-desc {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-activity-meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--slate);
+  white-space: nowrap;
+}
+
+.admin-activity-empty {
+  padding-block: 0.8rem;
+  font-size: 0.87rem;
+  color: var(--slate);
+}
+
 .admin-activity-skeleton {
   height: 2.6rem;
   background: var(--line);
@@ -156,6 +214,69 @@
   animation: admin-dashboard-skeleton-sweep 1.6s ease-in-out infinite;
 }
 
+/* -------------------------------------------------------------
+   4. Quick actions panel
+   ------------------------------------------------------------- */
+.admin-quick-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-quick-actions-list a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--slate-dark);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-quick-actions-list a:hover {
+  background: var(--ivory);
+  color: var(--ink);
+}
+
+.admin-quick-actions-list a:hover .admin-quick-action-chevron {
+  transform: translateX(2px);
+}
+
+.admin-quick-actions-list span:not(.admin-quick-action-icon) {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-quick-action-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: rgba(10, 22, 40, 0.05);
+  color: var(--slate-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-quick-action-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-quick-action-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--slate);
+  transition: transform 0.15s ease;
+}
+
+/* -------------------------------------------------------------
+   Responsive
+   ------------------------------------------------------------- */
 @media (max-width: 1080px) {
   .admin-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -164,6 +285,9 @@
 
 @media (max-width: 900px) {
   .admin-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-dashboard-grid {
     grid-template-columns: 1fr;
   }
 }
