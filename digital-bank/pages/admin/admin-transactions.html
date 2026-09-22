@@ -141,9 +141,13 @@
 </main>
 
 <!-- =========================================================
-     TRANSACTION DETAIL DRAWER
+     TRANSACTION DETAIL DRAWER — starts with `hidden` set (not
+     just aria-hidden="true"): .admin-drawer-overlay's visibility
+     is gated entirely on the .is-open class (admin.css), so the
+     JS must add `hidden` removal + `.is-open` together to open it,
+     same pattern as admin-approvals.html's modal.
      ========================================================= -->
-<div class="admin-drawer-overlay" id="tx-drawer-overlay" aria-hidden="true">
+<div class="admin-drawer-overlay" id="tx-drawer-overlay" aria-hidden="true" hidden>
   <aside class="admin-drawer" role="dialog" aria-modal="true" aria-labelledby="tx-drawer-title">
     <div class="admin-drawer-head">
       <div class="admin-drawer-identity">
@@ -166,9 +170,11 @@
 <!-- =========================================================
      REVERSE TRANSACTION MODAL — typed confirmation, since moving
      money back is one of the most dangerous actions in the panel.
+     Uses .modal-panel (not .modal-card, which isn't defined
+     anywhere) to match admin-approvals.html's working modal.
      ========================================================= -->
-<div class="modal-overlay" id="reverse-modal" aria-hidden="true">
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="reverse-modal-title">
+<div class="modal-overlay" id="reverse-modal" aria-hidden="true" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="reverse-modal-title">
     <div class="modal-head">
       <div>
         <h3 id="reverse-modal-title">Reverse transaction</h3>
