@@ -12,6 +12,32 @@
        action in the panel, so it gets the strictest confirmation
        tier per the architecture doc's "typed-confirmation for the
        most dangerous actions" line.
+
+   FIX LOG (this revision)
+   ---------------------------
+   - openDrawer()/closeDrawer() and openReverseModal()/
+     closeReverseModal() only ever toggled aria-hidden. Both
+     overlays' actual visibility is gated on the .is-open class
+     (admin.css's .admin-drawer-overlay / .modal-overlay rules),
+     which nothing here ever added — so "View" (and "Reverse this
+     transaction") ran correctly and populated content, but the
+     panel stayed invisible (opacity: 0; visibility: hidden). Fixed
+     to toggle the `hidden` attribute + `.is-open` together, same
+     pattern admin-approvals.js's modal already uses correctly.
+   - The drawer's injected markup used .admin-drawer-section /
+     .admin-detail-row, which admin-transactions.css never defines
+     (that file defines .admin-tx-flow / .admin-tx-summary /
+     .admin-tx-summary-field instead). Rewrote openDrawer() to
+     render the sender→receiver flow + summary grid the CSS was
+     actually built for.
+   - statusPill() emitted .admin-status-pill--success/warning/
+     danger/neutral, none of which exist anywhere in the shared or
+     page CSS. Replaced with .admin-tx-status-chip--completed/
+     processing/failed/reversed, which admin-transactions.css
+     defines with real colors for this table's actual status set.
+   - The reverse modal's markup used .modal-card in the HTML
+     (renamed to .modal-panel there) — nothing to change here since
+     this file never referenced that class directly, only the ids.
    ============================================================= */
 
 import { requireAdmin, canAccess } from '../../assets/js/admin/admin-guard.js';
@@ -231,8 +257,8 @@ function renderTable() {
         <tr data-tx-row="${row.id}">
           <td><code>${escapeHtml(row.transaction_reference || '—')}</code></td>
           <td>${escapeHtml(row.transaction_type || '—')}</td>
-          <td class="${Number(row.amount) < 0 ? 'is-negative' : ''}">${formatCurrency(row.amount, row.currency)}</td>
-          <td>${statusPill(row.status)}</td>
+          <td class="admin-table-amount ${Number(row.amount) < 0 ? 'neg' : 'pos'}">${formatCurrency(row.amount, row.currency)}</td>
+          <td>${statusChip(row.status)}</td>
           <td>${formatTimestamp(row.created_at)}</td>
           <td class="admin-table-actions">
             <button type="button" class="btn btn-ghost btn-sm" data-open-tx="${row.id}">View</button>
@@ -242,11 +268,11 @@ function renderTable() {
     .join('');
 
   $$('[data-open-tx]', tbody).forEach((btn) => {
-    btn.addEventListener('click', () => openDrawer(row_by_id(btn.dataset.openTx)));
+    btn.addEventListener('click', () => openDrawer(rowById(btn.dataset.openTx)));
   });
 }
 
-function row_by_id(id) {
+function rowById(id) {
   return state.rows.find((r) => r.id === id);
 }
 
@@ -257,24 +283,45 @@ function renderPagination() {
   $('#tx-next-page').disabled = state.page >= maxPage;
 }
 
-function statusPill(status) {
-  const known = { Completed: 'success', Processing: 'warning', Failed: 'danger', Reversed: 'neutral' };
-  const tone = known[status] || 'neutral';
-  return `<span class="admin-status-pill admin-status-pill--${tone}">${escapeHtml(status || 'unknown')}</span>`;
+const STATUS_CHIP_TONES = {
+  Completed: 'completed',
+  Processing: 'processing',
+  Failed: 'failed',
+  Reversed: 'reversed',
+};
+
+function statusChip(status) {
+  const tone = STATUS_CHIP_TONES[status] || 'reversed';
+  return `<span class="admin-tx-status-chip admin-tx-status-chip--${tone}">${escapeHtml(status || 'Unknown')}</span>`;
 }
 
 /* -----------------------------------------------------------
    Drawer
+   -----------------------------------------------------------
+   .admin-drawer-overlay's visibility is entirely gated on the
+   .is-open class (admin.css) — the `hidden` attribute is what
+   removes it from the accessibility tree and layout between uses.
+   Both must be toggled together, same as admin-approvals.js's
+   modal (`modal.hidden = false; requestAnimationFrame(() =>
+   modal.classList.add('is-open'))`).
    ----------------------------------------------------------- */
 function wireDrawer() {
   $('#tx-drawer-close').addEventListener('click', closeDrawer);
   $('#tx-drawer-overlay').addEventListener('click', (e) => {
     if (e.target === $('#tx-drawer-overlay')) closeDrawer();
   });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#tx-drawer-overlay').hidden) closeDrawer();
+  });
 }
 
 function closeDrawer() {
-  $('#tx-drawer-overlay').setAttribute('aria-hidden', 'true');
+  const overlay = $('#tx-drawer-overlay');
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
+  setTimeout(() => {
+    overlay.hidden = true;
+  }, 200); // matches admin.css's overlay/drawer transition duration
   state.activeTx = null;
 }
 
@@ -282,7 +329,11 @@ function openDrawer(tx) {
   if (!tx) return;
   state.activeTx = tx;
 
-  $('#tx-drawer-overlay').setAttribute('aria-hidden', 'false');
+  const overlay = $('#tx-drawer-overlay');
+  overlay.hidden = false;
+  requestAnimationFrame(() => overlay.classList.add('is-open'));
+  overlay.setAttribute('aria-hidden', 'false');
+
   $('#tx-drawer-title').textContent = tx.transaction_reference || 'Transaction';
   $('#tx-drawer-subtitle').textContent = formatTimestamp(tx.created_at);
 
@@ -292,23 +343,48 @@ function openDrawer(tx) {
     !tx.reversed_by;
 
   $('#tx-drawer-body').innerHTML = `
-    <section class="admin-drawer-section">
-      <h4>Details</h4>
-      <div class="admin-detail-row"><span>Amount</span><span>${formatCurrency(tx.amount, tx.currency)}</span></div>
-      <div class="admin-detail-row"><span>Fee</span><span>${formatCurrency(tx.fee, tx.currency)}</span></div>
-      <div class="admin-detail-row"><span>Type</span><span>${escapeHtml(tx.transaction_type || '—')}</span></div>
-      <div class="admin-detail-row"><span>Status</span><span>${statusPill(tx.status)}</span></div>
-      <div class="admin-detail-row"><span>Description</span><span>${escapeHtml(tx.description || '—')}</span></div>
-    </section>
-    <section class="admin-drawer-section">
-      <h4>Routing</h4>
-      <div class="admin-detail-row"><span>Sender account</span><span><code>${escapeHtml(tx.sender_account || '—')}</code></span></div>
-      <div class="admin-detail-row"><span>Receiver account</span><span><code>${escapeHtml(tx.receiver_account || '—')}</code></span></div>
-    </section>
+    <div class="admin-tx-flow">
+      <div class="admin-tx-flow-party">
+        <span>Sender account</span>
+        <strong>${escapeHtml(tx.sender_account || 'External')}</strong>
+      </div>
+      <span class="admin-tx-flow-arrow">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12M12 5l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div class="admin-tx-flow-party admin-tx-flow-party--receiver">
+        <span>Receiver account</span>
+        <strong>${escapeHtml(tx.receiver_account || 'External')}</strong>
+      </div>
+    </div>
+
+    <div class="admin-tx-summary">
+      <div class="admin-tx-summary-field admin-tx-summary-field--amount">
+        <span>Amount</span>
+        <p>${formatCurrency(tx.amount, tx.currency)}</p>
+      </div>
+      <div class="admin-tx-summary-field">
+        <span>Fee</span>
+        <p>${formatCurrency(tx.fee, tx.currency)}</p>
+      </div>
+      <div class="admin-tx-summary-field">
+        <span>Type</span>
+        <p>${escapeHtml(tx.transaction_type || '—')}</p>
+      </div>
+      <div class="admin-tx-summary-field">
+        <span>Status</span>
+        <p>${statusChip(tx.status)}</p>
+      </div>
+      <div class="admin-tx-summary-field" style="grid-column: 1 / -1;">
+        <span>Description</span>
+        <p>${escapeHtml(tx.description || '—')}</p>
+      </div>
+    </div>
+
     ${
       canReverse
-        ? `<div class="admin-drawer-footer">
+        ? `<div class="admin-drawer-footer-actions">
             <button type="button" class="btn btn-danger" id="drawer-reverse-btn">Reverse this transaction</button>
+            <p class="admin-drawer-footer-note">This creates an offsetting entry and cannot be undone.</p>
           </div>`
         : ''
     }
@@ -327,6 +403,9 @@ function wireReverseModal() {
   $$('[data-close-modal]', overlay).forEach((btn) => btn.addEventListener('click', closeReverseModal));
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) closeReverseModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !overlay.hidden) closeReverseModal();
   });
 
   $('#reverse-confirm-text').addEventListener('input', (e) => {
@@ -375,11 +454,20 @@ function openReverseModal(tx) {
   $('#reverse-confirm-text').value = '';
   $('#reverse-modal-submit').disabled = true;
   $('#reverse-modal-error').style.display = 'none';
-  $('#reverse-modal').setAttribute('aria-hidden', 'false');
+
+  const overlay = $('#reverse-modal');
+  overlay.hidden = false;
+  requestAnimationFrame(() => overlay.classList.add('is-open'));
+  overlay.setAttribute('aria-hidden', 'false');
 }
 
 function closeReverseModal() {
-  $('#reverse-modal').setAttribute('aria-hidden', 'true');
+  const overlay = $('#reverse-modal');
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
+  setTimeout(() => {
+    overlay.hidden = true;
+  }, 200);
 }
 
 /* -----------------------------------------------------------
