@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit Log — Meridian Admin</title>
+
+<script src="../../assets/js/auth-guard.js"></script>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<link rel="stylesheet" href="../../assets/css/dashboard.css">
+<link rel="stylesheet" href="../../assets/css/components.css">
+<link rel="stylesheet" href="../../assets/css/admin-audit-log.css">
+</head>
+<body class="app-body admin-body" data-auth="pending">
+
+  <div class="auth-loader" aria-hidden="true"><span class="auth-loader-mark"></span></div>
+
+  <div data-component="admin-navbar"></div>
+
+  <main class="admin-main">
+    <div class="admin-container">
+
+      <div class="admin-page-head">
+        <div>
+          <h1>Audit Log</h1>
+          <p class="admin-page-sub">A complete, read-only record of every administrative action taken across Meridian.</p>
+        </div>
+      </div>
+
+      <section class="admin-card">
+
+        <div class="admin-toolbar">
+          <label class="admin-field" style="margin-bottom:0;">
+            <span class="sr-only">Administrator</span>
+            <select id="audit-admin-filter">
+              <option value="all">All administrators</option>
+            </select>
+          </label>
+          <label class="admin-field" style="margin-bottom:0;">
+            <span class="sr-only">Action type</span>
+            <select id="audit-action-filter">
+              <option value="all">All actions</option>
+            </select>
+          </label>
+          <label class="admin-field" style="margin-bottom:0;">
+            <span class="sr-only">From date</span>
+            <input type="date" id="audit-from-date">
+          </label>
+          <label class="admin-field" style="margin-bottom:0;">
+            <span class="sr-only">To date</span>
+            <input type="date" id="audit-to-date">
+          </label>
+          <div class="admin-search-field">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5"/><path d="m17 17-3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <input type="search" id="audit-reason-search" placeholder="Search reason…" autocomplete="off">
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="audit-export-btn">Export CSV</button>
+        </div>
+
+        <p>Audit records cannot be edited or deleted. This table is a read-only view of <code>admin_audit_logs</code>.</p>
+
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-table--dense" id="audit-log-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Administrator</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Details</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="audit-log-body">
+              <tr class="admin-table-skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="admin-table-skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="admin-table-skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+              <tr class="admin-table-skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="admin-table-empty" id="audit-log-empty" hidden>
+          No audit entries match these filters.
+        </div>
+
+        <div class="admin-pagination" id="audit-log-pagination">
+          <button type="button" class="btn btn-ghost btn-sm" id="audit-prev-page" disabled>Previous</button>
+          <span id="audit-page-indicator">Page 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="audit-next-page">Next</button>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <div class="profile-toast-region" aria-live="polite"></div>
+
+  <script type="module" src="../../components/components.js"></script>
+  <script type="module" src="../../assets/js/admin/admin-layout.js"></script>
+  <script type="module" src="admin-audit-log.js"></script>
+
+</body>
+</html>
