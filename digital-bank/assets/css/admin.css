@@ -1125,13 +1125,10 @@
      scroll sideways. */
   .admin-table-wrap {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .admin-table {
-    min-width: 480px;
-  }
-  .admin-table th:nth-child(n+4),
-  .admin-table td:nth-child(n+4) {
-    display: none;
+    min-width: 640px;
   }
 
   /* Role pill adds noise once the topbar is this tight — the name
