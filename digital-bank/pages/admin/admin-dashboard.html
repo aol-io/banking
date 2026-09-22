@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Dashboard — Meridian Admin</title>
 <link rel="stylesheet" href="../../assets/css/admin.css">
+<link rel="stylesheet" href="../../assets/css/dashboard.css">
 <link rel="stylesheet" href="../../assets/css/components.css">
 <link rel="stylesheet" href="../../assets/css/admin-dashboard.css">
 </head>
@@ -21,7 +22,7 @@
     [data-auth="pending"] .admin-page-loader { display: flex; }
     [data-auth="ready"]   .admin-page-loader { display: none; }
 -->
-<body class="admin-body" data-auth="pending">
+<body class="app-body admin-body" data-auth="pending">
 
   <div class="admin-page-loader" aria-hidden="true">
     <span class="admin-page-loader-mark"></span>
@@ -31,6 +32,13 @@
 
   <main class="admin-main">
     <div class="admin-container">
+
+      <div class="admin-page-head">
+        <div>
+          <h1>Dashboard</h1>
+          <p class="admin-page-sub">A snapshot of what's happening across Meridian right now.</p>
+        </div>
+      </div>
 
       <!-- =================================================
            KPI row — each card links straight into the
@@ -49,27 +57,83 @@
 
       <p class="admin-inline-error" id="kpi-error" role="alert" aria-live="polite" hidden></p>
 
-      <!-- =================================================
-           Recent admin activity — thin slice of
-           admin_audit_logs, full history lives on
-           admin-audit-log.html. Kept intentionally small here:
-           just enough to answer "what just happened" without
-           duplicating that page's filters.
-           ================================================= -->
-      <section class="admin-panel" aria-labelledby="recent-activity-heading">
-        <div class="admin-panel-head">
-          <h2 id="recent-activity-heading">Recent admin activity</h2>
-          <a href="admin-audit-log.html" class="admin-link-arrow">View full log</a>
-        </div>
-        <ul class="admin-activity-list" id="recent-activity-list">
-          <li class="admin-activity-skeleton"></li>
-          <li class="admin-activity-skeleton"></li>
-          <li class="admin-activity-skeleton"></li>
-        </ul>
-      </section>
+      <div class="admin-dashboard-grid">
+
+        <!-- =================================================
+             Recent admin activity — thin slice of
+             admin_audit_logs, full history lives on
+             admin-audit-log.html. Kept intentionally small
+             here: just enough to answer "what just happened"
+             without duplicating that page's filters.
+             ================================================= -->
+        <section class="admin-panel" aria-labelledby="recent-activity-heading">
+          <div class="admin-panel-head">
+            <h2 id="recent-activity-heading">Recent admin activity</h2>
+            <a href="admin-audit-log.html" class="admin-link-arrow">View full log</a>
+          </div>
+          <ul class="admin-activity-list" id="recent-activity-list">
+            <li class="admin-activity-skeleton"></li>
+            <li class="admin-activity-skeleton"></li>
+            <li class="admin-activity-skeleton"></li>
+          </ul>
+        </section>
+
+        <!-- =================================================
+             Quick actions — static navigation shortcuts into
+             the pages admins reach for most often. Pure links,
+             no JS dependency, so this ships without touching
+             admin-dashboard.js.
+             ================================================= -->
+        <section class="admin-panel admin-quick-actions" aria-labelledby="quick-actions-heading">
+          <div class="admin-panel-head">
+            <h2 id="quick-actions-heading">Quick actions</h2>
+          </div>
+          <ul class="admin-quick-actions-list">
+            <li>
+              <a href="admin-kyc.html?status=pending">
+                <span class="admin-quick-action-icon">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3h9l3 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 10.5l2 2 4-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span>Review KYC queue</span>
+                <svg class="admin-quick-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3.5 11 8l-5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </a>
+            </li>
+            <li>
+              <a href="admin-approvals.html">
+                <span class="admin-quick-action-icon">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6.5 10.5l2 2 4-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="10" r="7.3" stroke="currentColor" stroke-width="1.4"/></svg>
+                </span>
+                <span>Approvals &amp; audit</span>
+                <svg class="admin-quick-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3.5 11 8l-5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </a>
+            </li>
+            <li>
+              <a href="admin-support.html?status=open">
+                <span class="admin-quick-action-icon">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 9.5a7 7 0 0 1 14 0v3.5a1.8 1.8 0 0 1-1.8 1.8H14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="2.7" y="9.5" width="3.4" height="4.6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="13.9" y="9.5" width="3.4" height="4.6" rx="1" stroke="currentColor" stroke-width="1.4"/></svg>
+                </span>
+                <span>Open support tickets</span>
+                <svg class="admin-quick-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3.5 11 8l-5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </a>
+            </li>
+            <li>
+              <a href="admin-users.html">
+                <span class="admin-quick-action-icon">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="7" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 17c1-3.5 4-5 6.5-5s5.5 1.5 6.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                </span>
+                <span>Search users</span>
+                <svg class="admin-quick-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3.5 11 8l-5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </a>
+            </li>
+          </ul>
+        </section>
+
+      </div>
 
     </div>
   </main>
+
+  <div class="profile-toast-region" aria-live="polite"></div>
 
   <script type="module" src="./admin-dashboard.js"></script>
 </body>
