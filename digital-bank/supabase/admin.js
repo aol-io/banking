@@ -367,12 +367,9 @@ export async function getTransactionSummary({ status, currency, search, from: da
 
 
 export async function reverseTransaction(transactionId, reason) {
-  const ctx = await getClientContext();
   return wrap(supabase.rpc('admin_reverse_transaction', {
     p_transaction_id: transactionId,
     p_reason: reason,
-    p_ip_address: ctx.ip,
-    p_browser: ctx.browser,
   }));
 }
 
