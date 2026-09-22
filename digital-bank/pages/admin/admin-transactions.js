@@ -12,6 +12,10 @@
        action in the panel, so it gets the strictest confirmation
        tier per the architecture doc's "typed-confirmation for the
        most dangerous actions" line.
+     - email notification on reversal, via assets/js/email.js
+       (EmailJS) — sent to whoever actually received the money,
+       resolved fresh each time the drawer opens (see
+       resolveReceiverContact()).
 
    FIX LOG (this revision)
    ---------------------------
@@ -38,6 +42,26 @@
    - The reverse modal's markup used .modal-card in the HTML
      (renamed to .modal-panel there) — nothing to change here since
      this file never referenced that class directly, only the ids.
+   - reverseTransaction() (supabase/admin.js) previously sent
+     p_ip_address/p_browser that admin_reverse_transaction() doesn't
+     accept — see that file's own fix log. Nothing to change here,
+     but noting it since it blocked this page end-to-end until fixed.
+
+   THIS REVISION
+   ---------------------------
+   - Added resolveReceiverContact(): looks up the receiving
+     account's owner (receiver_account -> accounts.user_id ->
+     user_profiles.email/first_name/last_name) so the reversal
+     email has a real address to send to. Runs once, when the
+     drawer opens, and is attached to the tx object rather than
+     re-queried inside the reverse-modal submit handler.
+   - openDrawer() is now async (it awaits the contact lookup before
+     rendering) — its call site in renderTable() is updated to match.
+   - wireReverseModal()'s submit handler now calls
+     sendTransactionEmail('reversed', ...) after a successful
+     reversal, using the email/name resolved above. A failed email
+     send is logged but never blocks the UI — the reversal itself
+     already succeeded by that point.
    ============================================================= */
 
 import { requireAdmin, canAccess } from '../../assets/js/admin/admin-guard.js';
@@ -45,7 +69,7 @@ import { initAdminLayout } from '../../assets/js/admin/admin-layout.js';
 import { listTransactions, getTransactionSummary, reverseTransaction } from '../../supabase/admin.js';
 import { $, $$, debounce, formatTimestamp, formatCurrency, getQueryParam } from '../../assets/js/utils.js';
 import { sendTransactionEmail } from '../../assets/js/email.js';
-
+import { supabase } from '../../supabase/config.js';
 
 const PAGE_SIZE = 25;
 
@@ -270,7 +294,11 @@ function renderTable() {
     .join('');
 
   $$('[data-open-tx]', tbody).forEach((btn) => {
-    btn.addEventListener('click', () => openDrawer(rowById(btn.dataset.openTx)));
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      await openDrawer(rowById(btn.dataset.openTx));
+      btn.disabled = false;
+    });
   });
 }
 
@@ -295,6 +323,41 @@ const STATUS_CHIP_TONES = {
 function statusChip(status) {
   const tone = STATUS_CHIP_TONES[status] || 'reversed';
   return `<span class="admin-tx-status-chip admin-tx-status-chip--${tone}">${escapeHtml(status || 'Unknown')}</span>`;
+}
+
+/* -----------------------------------------------------------
+   Receiver contact lookup
+   -----------------------------------------------------------
+   Transaction rows only carry sender_account/receiver_account
+   (account ids), not an email address. Resolves the account that
+   RECEIVED the money -> its owning user_profiles row, so a
+   reversal notification has somewhere real to send. Runs once
+   when the drawer opens rather than re-querying inside the
+   reverse-modal submit handler.
+   ----------------------------------------------------------- */
+async function resolveReceiverContact(tx) {
+  if (!tx.receiver_account) return { email: null, name: null };
+
+  const { data: account } = await supabase
+    .from('accounts')
+    .select('user_id')
+    .eq('id', tx.receiver_account)
+    .maybeSingle();
+
+  if (!account?.user_id) return { email: null, name: null };
+
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('email, first_name, last_name')
+    .eq('id', account.user_id)
+    .maybeSingle();
+
+  if (!profile) return { email: null, name: null };
+
+  return {
+    email: profile.email,
+    name: [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Customer',
+  };
 }
 
 /* -----------------------------------------------------------
@@ -327,8 +390,16 @@ function closeDrawer() {
   state.activeTx = null;
 }
 
-function openDrawer(tx) {
+async function openDrawer(tx) {
   if (!tx) return;
+
+  // Resolve who actually received the funds before rendering, so
+  // tx.customer_email/customer_name are already set by the time
+  // "Reverse this transaction" can be clicked.
+  const contact = await resolveReceiverContact(tx);
+  tx.customer_email = contact.email;
+  tx.customer_name = contact.name;
+
   state.activeTx = tx;
 
   const overlay = $('#tx-drawer-overlay');
@@ -443,28 +514,36 @@ function wireReverseModal() {
       return;
     }
 
-    const emailResult = await sendTransactionEmail('reversed', {
-      to_email: tx.customer_email,
-      customer_name: tx.customer_name || 'Customer',
-      email_title: 'A transaction on your account was reversed',
-      email_message: 'This confirms the transaction below has been reversed and funds returned to your account.',
-      preheader_text: `Your transaction ${tx.transaction_reference} was reversed.`,
-      amount_label: 'Amount reversed',
-      amount: formatCurrency(tx.amount, tx.currency),
-      from_label: 'Original sender',
-      from_value: tx.sender_account || 'External',
-      to_label: 'Original receiver',
-      to_value: tx.receiver_account || 'External',
-      reference: tx.transaction_reference,
-      transaction_type: tx.transaction_type,
-      date: formatTimestamp(new Date()),
-      note_label: 'Reason',
-      note_value: reason,
-    });
+    // Reversal succeeded — notify whoever received the funds.
+    // tx.customer_email/customer_name were resolved when the
+    // drawer opened (see resolveReceiverContact()). A missing
+    // email or a failed send is logged but never blocks the UI,
+    // since the reversal itself has already gone through.
+    if (tx.customer_email) {
+      const emailResult = await sendTransactionEmail('reversed', {
+        to_email: tx.customer_email,
+        customer_name: tx.customer_name || 'Customer',
+        email_title: 'A transaction on your account was reversed',
+        email_message: 'This confirms the transaction below has been reversed and funds returned to your account.',
+        preheader_text: `Your transaction ${tx.transaction_reference} was reversed.`,
+        amount_label: 'Amount reversed',
+        amount: formatCurrency(tx.amount, tx.currency),
+        from_label: 'Original sender',
+        from_value: tx.sender_account || 'External',
+        to_label: 'Original receiver',
+        to_value: tx.receiver_account || 'External',
+        reference: tx.transaction_reference,
+        transaction_type: tx.transaction_type,
+        date: formatTimestamp(new Date()),
+        note_label: 'Reason',
+        note_value: reason,
+      });
 
-    if (!emailResult.ok) {
-      console.error('Reversal succeeded but email failed:', emailResult.error);
-      // don't block the UI on this — the reversal itself already succeeded
+      if (!emailResult.ok) {
+        console.error('Reversal succeeded but email failed:', emailResult.error);
+      }
+    } else {
+      console.warn('Reversal succeeded but no receiver email was found — notification not sent.');
     }
 
     showToast('Transaction reversed.', 'success');
