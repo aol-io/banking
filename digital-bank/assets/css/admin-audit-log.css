@@ -1,0 +1,24 @@
+/* =============================================================
+   MERIDIAN — Admin panel
+   assets/css/admin-audit-log.css
+
+   Page-specific styles for admin-audit-log.html. Everything else
+   this page needs (.admin-page-head, .admin-card, .admin-toolbar,
+   .admin-search-field, .admin-table-wrap/.admin-table, .skeleton,
+   .admin-pagination) already lives in assets/css/admin.css — this
+   file only adds what that shared stylesheet doesn't cover.
+
+   .admin-table--dense mirrors the rule of the same name in
+   pages/admin/admin-approvals.css (used there for its Audit trail
+   tab). Duplicated here rather than loading that page-specific
+   stylesheet wholesale, since most of its other rules (modal diff
+   panels, maker-checker notice, its own stat-card variant) don't
+   apply to this page. If the two ever drift, this is the one to
+   update, or promote the rule into admin.css as a shared primitive.
+   ============================================================= */
+
+.admin-table--dense th,
+.admin-table--dense td {
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+}
