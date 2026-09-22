@@ -1156,3 +1156,231 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+
+/* -------------------------------------------------------------
+   13. Buttons & modals — shared across every admin page
+   -----------------------------------------------------------
+   Defined here (not style.css/components.css) since neither
+   actually styles .btn/.modal-*/.field on the admin pages that
+   reference them — see the "still invisible" bug this fixes.
+   ------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.87rem;
+  padding: 0.7rem 1.3rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+
+.btn svg {
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.82rem;
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--ivory);
+}
+
+.btn-primary:hover {
+  background: var(--ink-3);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--slate-dark);
+}
+
+.btn-ghost:hover {
+  background: var(--ivory);
+}
+
+.btn-danger {
+  background: var(--red);
+  color: var(--ivory);
+}
+
+.btn-danger:hover {
+  background: #a53a31;
+}
+
+.btn:disabled {
+  background: var(--line);
+  color: var(--slate);
+  border-color: var(--line);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(10, 22, 40, 0.55);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.modal-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-panel {
+  width: 100%;
+  max-width: 440px;
+  background: var(--paper);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 1.75rem;
+  transform: translateY(12px) scale(0.98);
+  transition: transform 0.2s ease;
+}
+
+.modal-overlay.is-open .modal-panel {
+  transform: translateY(0) scale(1);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.modal-head h3 {
+  font-size: 1.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.modal-head p {
+  font-size: 0.85rem;
+  color: var(--slate);
+  line-height: 1.5;
+}
+
+.modal-head p strong {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ivory);
+  color: var(--slate);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.modal-close:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.modal-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.field {
+  margin-bottom: 1.1rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.4rem;
+}
+
+.field textarea,
+.field input[type="text"],
+.field input[type="email"],
+.field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--ivory);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.88rem;
+  font-family: var(--font-body);
+  color: var(--slate-dark);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.field textarea:focus,
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--brass);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px rgba(181, 138, 68, 0.18);
+}
+
+.field-error {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--red);
+  margin-top: 0.35rem;
+  min-height: 1em;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+.admin-modal-danger-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: var(--red-bg);
+  color: var(--red);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  font-size: 0.82rem;
+  margin-bottom: 1.1rem;
+}
+
+.admin-modal-danger-note svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
