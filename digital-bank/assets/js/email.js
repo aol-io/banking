@@ -13,6 +13,17 @@
    email-template.html) — one template shape for reversals,
    transfers (in/out), failures, and pending states, distinguished
    by the params passed in.
+
+   NOTE FALLBACK (added): the template's Note row (note_label/
+   note_value) always renders — EmailJS templates can't drop a
+   table row conditionally. Reversed/failed/pending sends always
+   pass a real note, so this never mattered for them. Plain
+   transfer_sent/transfer_received sends have nothing to put there,
+   which used to leave a blank row with no border under Status.
+   sendTransactionEmail() now fills in a neutral default whenever
+   the caller doesn't supply note_label/note_value, and derives
+   note_border from whether a real note was given — see
+   withNoteFallback() below.
    ============================================================= */
 
 const EMAILJS_SERVICE_ID = 'service_nbcwufa';
@@ -71,6 +82,27 @@ const STATUS_PRESETS = {
 };
 
 /**
+ * Fills in a neutral Note row when the caller didn't supply one,
+ * and sets note_border to match — a real note keeps the divider
+ * under Status (note_border set), a fallback drops it so the row
+ * reads as a deliberate closing line rather than a gap.
+ */
+function withNoteFallback(fields) {
+  const hasNote = Boolean(fields.note_value);
+  return {
+    note_label: fields.note_label || 'Note',
+    note_value: fields.note_value || '—',
+    note_border: hasNote ? 'border-bottom:1px solid #e3e0d8;' : '',
+    ...fields,
+    // re-apply after the spread so an explicit empty string from the
+    // caller can't accidentally win over the computed fallback above
+    note_label: fields.note_label || 'Note',
+    note_value: fields.note_value || '—',
+    note_border: hasNote ? 'border-bottom:1px solid #e3e0d8;' : '',
+  };
+}
+
+/**
  * Sends a transaction-related notification email.
  *
  * @param {'reversed'|'transfer_sent'|'transfer_received'|'failed'|'pending'} type
@@ -89,8 +121,8 @@ const STATUS_PRESETS = {
  * @param {string} fields.reference
  * @param {string} fields.transaction_type
  * @param {string} fields.date
- * @param {string} fields.note_label          - e.g. "Reason" / "Memo"
- * @param {string} fields.note_value
+ * @param {string} [fields.note_label]        - e.g. "Reason" / "Memo" — omit for plain transfers
+ * @param {string} [fields.note_value]        - omit for plain transfers; a neutral default fills in
  * @param {string} [fields.account_url]
  * @returns {Promise<{ok: true} | {ok: false, error: string}>}
  */
@@ -107,7 +139,7 @@ export async function sendTransactionEmail(type, fields) {
       ...preset,
       year: new Date().getFullYear(),
       account_url: fields.account_url || 'https://meridian.example.com/dashboard.html',
-      ...fields,
+      ...withNoteFallback(fields),
     };
 
     await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params);
