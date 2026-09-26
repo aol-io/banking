@@ -255,6 +255,15 @@
   right: 0;
 }
 
+/* .tx-filter-dropdown declares display:flex above at the same
+   specificity as the browser's built-in [hidden]{display:none}
+   rule, so author CSS was winning the tie and the panel never
+   actually hid when JS set `panel.hidden = true`. [hidden] as
+   part of the selector raises specificity so this always wins. */
+.tx-filter-dropdown[hidden] {
+  display: none;
+}
+
 .tx-filter-option {
   display: flex;
   align-items: center;
@@ -654,9 +663,24 @@
 }
 
 @media (max-width: 900px) {
+  /* Money in / out / net / pending strip — hidden on mobile. */
+  .tx-summary-grid {
+    display: none;
+  }
+
   .tx-filter-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* .tx-search's flex-basis (260px) and flex-grow were written for
+     a row layout, where they control width. In this column layout
+     they control HEIGHT instead, which is what was making the
+     search box balloon — reset it to a normal full-width row. */
+  .tx-search {
+    flex: none;
+    width: 100%;
+    min-width: 0;
   }
 
   /* Swap the desktop <select>/<input> filter group for the chip +
