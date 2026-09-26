@@ -61,6 +61,8 @@ import {
   getTransferPolicy,
   getMyTransferLimitOverrides,
 } from '../supabase/database.js';
+import { sendTransactionEmail } from '../assets/js/email.js';
+import { supabase } from '../supabase/config.js';
 
 const $ = (selector, scope) => (scope || document).querySelector(selector);
 const $$ = (selector, scope) => Array.from((scope || document).querySelectorAll(selector));
