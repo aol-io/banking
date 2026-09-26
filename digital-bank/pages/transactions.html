@@ -30,15 +30,12 @@
 <main id="main-content" class="transactions-main">
   <div class="container">
 
-    <div class="page-head page-head--split">
-      <div>
-        <h1>Transactions</h1>
-        <p>Every payment, transfer, and charge across all your Meridian balances.</p>
-      </div>
-      <button type="button" class="btn btn-ghost" id="tx-export-btn">
-        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v9M4.5 7.5 8 11l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13.5h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        Export CSV
-      </button>
+    <!-- Export CSV used to live here as a button next to the title.
+         Moved down to the list footer (next to the "Showing X of Y"
+         count) so the header stays just the title + subtitle. -->
+    <div class="page-head">
+      <h1>Transactions</h1>
+      <p>Every payment, transfer, and charge across all your Meridian balances.</p>
     </div>
 
     <!-- =========================================================
@@ -66,7 +63,7 @@
     <!-- =========================================================
          FILTER BAR
          Two layouts live side by side here, toggled purely by CSS
-         media query (see transactions.css — not yet updated):
+         media query:
            - .tx-filter-group      -> desktop/tablet, unchanged,
              always visible above the mobile breakpoint.
            - .tx-filter-mobile     -> mobile only. A collapsed
@@ -85,7 +82,7 @@
       </div>
 
       <!-- =========================================================
-           NEW — MOBILE COLLAPSED FILTERS
+           MOBILE COLLAPSED FILTERS
            Category and Status are independent from the desktop
            #tx-filter-type / #tx-filter-status selects below: Category
            here is DIRECTION-based (Debit / Credit / Other), not the
@@ -195,9 +192,8 @@
 
       <!-- =========================================================
            EXISTING DESKTOP/TABLET FILTER GROUP — unchanged.
-           Hidden below the mobile breakpoint via CSS once
-           transactions.css is updated; .tx-filter-mobile above
-           takes its place there instead.
+           Hidden below the mobile breakpoint via CSS;
+           .tx-filter-mobile above takes its place there instead.
            ========================================================= -->
       <div class="tx-filter-group">
         <label for="tx-filter-account" class="sr-only">Filter by account</label>
@@ -276,7 +272,15 @@
           </div>
         </div>
 
-        <p class="tx-list-count" id="tx-list-count"></p>
+        <!-- Count + Export CSV now share this footer row instead of
+             Export sitting up in the page header. -->
+        <div class="tx-list-footer">
+          <p class="tx-list-count" id="tx-list-count"></p>
+          <button type="button" class="tx-export-link" id="tx-export-btn">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v9M4.5 7.5 8 11l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13.5h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Export CSV
+          </button>
+        </div>
 
         <div class="tx-load-more">
           <button type="button" class="btn btn-ghost" id="tx-load-more-btn" hidden>Load more transactions</button>
