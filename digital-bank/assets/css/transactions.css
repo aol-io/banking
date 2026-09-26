@@ -11,6 +11,7 @@
    Contents:
      1. Summary strip
      2. Filter bar
+     2b. Mobile filter widgets (category / status / timeframe chips)
      3. Two-column layout (list + detail)
      4. Transaction list (day groups, rows, skeleton)
      5. Detail panel (desktop sidebar / mobile sheet)
@@ -139,6 +140,275 @@
 .tx-filter-group input[type="date"] {
   cursor: text;
   color-scheme: light;
+}
+
+/* -------------------------------------------------------------
+   2b. Mobile filter widgets (category / status / timeframe chips)
+   Hidden on desktop/tablet by default — .tx-filter-group (the
+   existing <select>s above) is what's visible there. Section 7
+   flips which of the two is shown at the mobile breakpoint, so
+   the two never show at once and never desync (JS shares state
+   between them — see transactions.js).
+   ------------------------------------------------------------- */
+.tx-filter-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.tx-filter-mobile-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.tx-filter-select-wrap {
+  position: relative;
+  flex: 1 1 0;
+}
+
+.tx-filter-select-wrap--timeframe {
+  flex: none;
+}
+
+.tx-filter-chip,
+.tx-filter-timeframe-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--ivory);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--slate-dark);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tx-filter-chip {
+  justify-content: space-between;
+}
+
+.tx-filter-timeframe-btn {
+  justify-content: flex-start;
+}
+
+.tx-filter-timeframe-btn span:first-of-type {
+  flex: 1;
+  text-align: left;
+}
+
+.tx-filter-chip:hover,
+.tx-filter-timeframe-btn:hover {
+  border-color: var(--brass);
+}
+
+.tx-filter-chip[aria-expanded="true"],
+.tx-filter-timeframe-btn[aria-expanded="true"] {
+  border-color: var(--brass);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px rgba(181, 138, 68, 0.16);
+}
+
+.tx-filter-chip-caret {
+  width: 10px;
+  height: 10px;
+  color: var(--slate);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.tx-filter-chip[aria-expanded="true"] .tx-filter-chip-caret,
+.tx-filter-timeframe-btn[aria-expanded="true"] .tx-filter-chip-caret {
+  transform: rotate(180deg);
+}
+
+.tx-filter-timeframe-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--slate);
+  flex-shrink: 0;
+}
+
+/* Category / status dropdown panels */
+.tx-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  min-width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  padding: 0.4rem;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tx-filter-dropdown--right {
+  left: auto;
+  right: 0;
+}
+
+.tx-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--slate-dark);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.tx-filter-option:hover {
+  background: var(--ivory);
+}
+
+.tx-filter-option.is-selected {
+  background: rgba(181, 138, 68, 0.1);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tx-filter-option-sub {
+  margin-left: auto;
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--slate);
+}
+
+.tx-filter-option.is-selected .tx-filter-option-sub {
+  color: var(--slate-dark);
+}
+
+.tx-filter-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.tx-filter-dot--debit {
+  background: var(--red);
+}
+
+.tx-filter-dot--credit {
+  background: #3f7f5c;
+}
+
+.tx-filter-dot--other {
+  background: var(--slate);
+}
+
+/* Timeframe panel — wider, dialog-style, with presets + custom range */
+.tx-filter-timeframe-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  padding: 0.85rem;
+  z-index: 60;
+}
+
+.tx-filter-timeframe-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.tx-filter-preset {
+  border: 1px solid var(--line);
+  background: var(--ivory);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--slate-dark);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.tx-filter-preset:hover {
+  border-color: var(--brass);
+}
+
+.tx-filter-preset.is-selected {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--paper);
+}
+
+.tx-filter-timeframe-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+  margin-bottom: 0.75rem;
+}
+
+.tx-filter-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tx-filter-date-row label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--slate-dark);
+}
+
+.tx-filter-date-row input[type="date"] {
+  border: 1px solid var(--line);
+  background: var(--ivory);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--slate-dark);
+  color-scheme: light;
+}
+
+.tx-filter-timeframe-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.tx-filter-mobile-reset {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--slate);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.tx-filter-mobile-reset:hover {
+  color: var(--brass);
 }
 
 /* -------------------------------------------------------------
@@ -389,13 +659,15 @@
     align-items: stretch;
   }
 
+  /* Swap the desktop <select>/<input> filter group for the chip +
+     dropdown widgets — both read/write the same JS state, so this
+     is a pure display swap, nothing to keep in sync here. */
   .tx-filter-group {
-    justify-content: flex-start;
+    display: none;
   }
 
-  .tx-filter-group select,
-  .tx-filter-group input[type="date"] {
-    flex: 1 1 auto;
+  .tx-filter-mobile {
+    display: flex;
   }
 }
 
