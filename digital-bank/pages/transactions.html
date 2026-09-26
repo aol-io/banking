@@ -65,6 +65,17 @@
 
     <!-- =========================================================
          FILTER BAR
+         Two layouts live side by side here, toggled purely by CSS
+         media query (see transactions.css — not yet updated):
+           - .tx-filter-group      -> desktop/tablet, unchanged,
+             always visible above the mobile breakpoint.
+           - .tx-filter-mobile     -> mobile only. A collapsed
+             two-button row (Category left / Status right) plus a
+             timeframe chip beneath, each opening its own small
+             dropdown/panel instead of showing raw <select>s and
+             date inputs all at once.
+         The search box (.tx-search) is shared by both — no
+         breakpoint-specific version needed.
          ========================================================= -->
     <div class="tx-filter-bar">
       <div class="tx-search">
@@ -73,6 +84,121 @@
         <input type="search" id="tx-search-input" placeholder="Search by description, reference, or amount">
       </div>
 
+      <!-- =========================================================
+           NEW — MOBILE COLLAPSED FILTERS
+           Category and Status are independent from the desktop
+           #tx-filter-type / #tx-filter-status selects below: Category
+           here is DIRECTION-based (Debit / Credit / Other), not the
+           desktop's transaction-TYPE list, per the redesign. Status
+           mirrors the desktop status set plus "Reversed", which the
+           desktop select didn't previously offer.
+
+           Each trigger button + its dropdown/panel share a
+           position:relative wrapper (.tx-filter-select-wrap) so the
+           panel can anchor directly beneath its own button in CSS,
+           rather than one shared overlay for both.
+           ========================================================= -->
+      <div class="tx-filter-mobile" id="tx-filter-mobile">
+        <div class="tx-filter-mobile-row">
+
+          <!-- Category (direction) dropdown -->
+          <div class="tx-filter-select-wrap">
+            <button type="button" class="tx-filter-chip" id="tx-category-btn"
+                    aria-haspopup="listbox" aria-expanded="false" aria-controls="tx-category-dropdown">
+              <span id="tx-category-label">Category</span>
+              <svg class="tx-filter-chip-caret" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path d="M2.5 3.75 5 6.25l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+
+            <div class="tx-filter-dropdown" id="tx-category-dropdown" hidden role="listbox" aria-label="Filter by category">
+              <button type="button" class="tx-filter-option is-selected" data-category="all" role="option" aria-selected="true">All categories</button>
+              <button type="button" class="tx-filter-option" data-category="debit" role="option" aria-selected="false">
+                <span class="tx-filter-dot tx-filter-dot--debit" aria-hidden="true"></span>
+                Debit <span class="tx-filter-option-sub">Money out</span>
+              </button>
+              <button type="button" class="tx-filter-option" data-category="credit" role="option" aria-selected="false">
+                <span class="tx-filter-dot tx-filter-dot--credit" aria-hidden="true"></span>
+                Credit <span class="tx-filter-option-sub">Money in</span>
+              </button>
+              <button type="button" class="tx-filter-option" data-category="other" role="option" aria-selected="false">
+                <span class="tx-filter-dot tx-filter-dot--other" aria-hidden="true"></span>
+                Other <span class="tx-filter-option-sub">Fees &amp; adjustments</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Status dropdown -->
+          <div class="tx-filter-select-wrap">
+            <button type="button" class="tx-filter-chip" id="tx-status-btn"
+                    aria-haspopup="listbox" aria-expanded="false" aria-controls="tx-status-dropdown">
+              <span id="tx-status-label">Status</span>
+              <svg class="tx-filter-chip-caret" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path d="M2.5 3.75 5 6.25l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+
+            <div class="tx-filter-dropdown tx-filter-dropdown--right" id="tx-status-dropdown" hidden role="listbox" aria-label="Filter by status">
+              <button type="button" class="tx-filter-option is-selected" data-status="all" role="option" aria-selected="true">All statuses</button>
+              <button type="button" class="tx-filter-option" data-status="Completed" role="option" aria-selected="false">Successful</button>
+              <button type="button" class="tx-filter-option" data-status="Processing" role="option" aria-selected="false">Pending</button>
+              <button type="button" class="tx-filter-option" data-status="Reversed" role="option" aria-selected="false">Reversed</button>
+              <button type="button" class="tx-filter-option" data-status="Failed" role="option" aria-selected="false">Failed</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeframe chip — sits beneath the category/status row,
+             opens a small panel with presets + a custom range. -->
+        <div class="tx-filter-select-wrap tx-filter-select-wrap--timeframe">
+          <button type="button" class="tx-filter-timeframe-btn" id="tx-timeframe-btn"
+                  aria-haspopup="dialog" aria-expanded="false" aria-controls="tx-timeframe-panel">
+            <svg class="tx-filter-timeframe-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M2 6.5h12M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            <span id="tx-timeframe-label">All time</span>
+            <svg class="tx-filter-chip-caret" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+              <path d="M2.5 3.75 5 6.25l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+
+          <div class="tx-filter-timeframe-panel" id="tx-timeframe-panel" hidden role="dialog" aria-modal="true" aria-label="Select time frame">
+            <div class="tx-filter-timeframe-presets" role="radiogroup" aria-label="Preset ranges">
+              <button type="button" class="tx-filter-preset is-selected" data-range="all">All time</button>
+              <button type="button" class="tx-filter-preset" data-range="7d">Last 7 days</button>
+              <button type="button" class="tx-filter-preset" data-range="30d">Last 30 days</button>
+              <button type="button" class="tx-filter-preset" data-range="month">This month</button>
+              <button type="button" class="tx-filter-preset" data-range="custom">Custom range</button>
+            </div>
+
+            <div class="tx-filter-timeframe-custom" id="tx-timeframe-custom" hidden>
+              <div class="tx-filter-date-row">
+                <label for="tx-filter-from-mobile">From</label>
+                <input type="date" id="tx-filter-from-mobile">
+              </div>
+              <div class="tx-filter-date-row">
+                <label for="tx-filter-to-mobile">To</label>
+                <input type="date" id="tx-filter-to-mobile">
+              </div>
+            </div>
+
+            <div class="tx-filter-timeframe-actions">
+              <button type="button" class="btn btn-ghost btn-sm" id="tx-timeframe-cancel">Cancel</button>
+              <button type="button" class="btn btn-primary btn-sm" id="tx-timeframe-apply">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="tx-filter-mobile-reset" id="tx-filter-reset-mobile">Reset filters</button>
+      </div>
+
+      <!-- =========================================================
+           EXISTING DESKTOP/TABLET FILTER GROUP — unchanged.
+           Hidden below the mobile breakpoint via CSS once
+           transactions.css is updated; .tx-filter-mobile above
+           takes its place there instead.
+           ========================================================= -->
       <div class="tx-filter-group">
         <label for="tx-filter-account" class="sr-only">Filter by account</label>
         <select id="tx-filter-account">
