@@ -4,6 +4,29 @@
 
    Changes in THIS pass:
 
+   D. TRANSACTION EMAIL NOTIFICATIONS — every completed transfer
+      now fires the same sendTransactionEmail() helper the admin
+      panel's reversal flow already uses (assets/js/email.js).
+      Two sends, both fire-and-forget (a failed send is logged but
+      never blocks the UI, same pattern as
+      admin-transactions.js's reversal email):
+        - 'transfer_sent'     -> the sender, using the profile
+          fetched once at init (myProfile) rather than a fresh
+          query per send.
+        - 'transfer_received' -> the receiver, but ONLY when the
+          receiver is an internal Meridian account. An external
+          beneficiary has no Meridian login/email to notify, so
+          resolveReceiverContact() (copied from
+          admin-transactions.js's identical helper) resolves
+          tx.receiver_account -> accounts.user_id ->
+          user_profiles.email and simply returns null when there's
+          nothing to resolve.
+      Requires the EmailJS SDK script tag added to transfer.html
+      before this file (see that file's own change note).
+
+   ---- Everything below this point (A, B, C from the previous
+   revision) is unchanged. ----
+
    A. HEADER — transfer.html now loads the shared app-navbar
       component (same as dashboard.html/profile.html) instead of
       its own hand-written header, which never had a notification
@@ -41,14 +64,12 @@
    code were checked and are correct — the open question is
    whether rows exist in the table at all, which needs one more
    SQL query before a real fix (vs. a guess) can be written.
-
-   ---- Everything below this point is unchanged from the previous
-   revision except where marked NEW/CHANGED above. ----
    ============================================================= */
 
 import { signOutUser } from '../supabase/auth.js';
 import { guardPage } from '../supabase/page-guard.js';
 import { verifyCurrentPassword } from '../supabase/auth.js';
+import { supabase } from '../supabase/config.js'; // NEW — used by resolveReceiverContact()
 import {
   getMyProfile,
   getUnreadNotificationCount,
@@ -61,8 +82,7 @@ import {
   getTransferPolicy,
   getMyTransferLimitOverrides,
 } from '../supabase/database.js';
-import { sendTransactionEmail } from '../assets/js/email.js';
-import { supabase } from '../supabase/config.js';
+import { sendTransactionEmail } from '../assets/js/email.js'; // NEW
 
 const $ = (selector, scope) => (scope || document).querySelector(selector);
 const $$ = (selector, scope) => Array.from((scope || document).querySelectorAll(selector));
@@ -88,7 +108,6 @@ const AUTH_LOCKOUT_MS = 60000;
 
 const ACCOUNT_NUMBER_MIN_LENGTH = 10;
 
-// CHANGED — reworded for a warmer, more professional tone.
 const HERO_COPY = {
   1: {
     title: "Who's this transfer for?",
@@ -148,8 +167,9 @@ let authFailedAttempts = 0;
 let authLockedUntil = 0;
 let lastTransferReceipt = null; // populated right before step 5, read by the PDF download
 let effectiveLimits = null; // { maxSingleTransfer, minTransfer, dailyTransferLimit }, resolved once per wizard pass
+let myProfile = null; // NEW — the sender's own profile, fetched once at init for transfer_sent emails
 
-// NEW — caches so recalcConversion() only hits the network when the
+// Caches so recalcConversion() only hits the network when the
 // currency pair actually changes, not on every amount keystroke.
 let limitsByCurrency = new Map();  // currency -> converted limits
 let rateCallToken = 0;             // staleness guard for recalcConversion
@@ -252,7 +272,7 @@ function initLogout() {
 }
 
 /* -----------------------------------------------------------
-   NEW — wait for the app-navbar component
+   Wait for the app-navbar component
    transfer.html now loads its header from components/app-navbar.html
    via components.js's loadComponents(), same as dashboard.html/
    profile.js. That can resolve before OR after this module's own
@@ -270,6 +290,44 @@ function waitForNavbar() {
     }
     document.addEventListener('component:loaded', () => resolve(), { once: true });
   });
+}
+
+/* -----------------------------------------------------------
+   Receiver contact lookup (NEW)
+   -----------------------------------------------------------
+   Identical to admin-transactions.js's resolveReceiverContact():
+   the committed transaction row only carries sender_account/
+   receiver_account (account ids), not an email address. Resolves
+   the account that RECEIVED the money -> its owning user_profiles
+   row, so a 'transfer_received' notification has somewhere real
+   to send. Returns { email: null, name: null } for an external
+   transfer (no receiver_account) or a receiver account whose owner
+   can't be found — callers treat that as "nothing to notify",
+   never as an error.
+   ----------------------------------------------------------- */
+async function resolveReceiverContact(tx) {
+  if (!tx?.receiver_account) return { email: null, name: null };
+
+  const { data: account } = await supabase
+    .from('accounts')
+    .select('user_id')
+    .eq('id', tx.receiver_account)
+    .maybeSingle();
+
+  if (!account?.user_id) return { email: null, name: null };
+
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('email, first_name, last_name')
+    .eq('id', account.user_id)
+    .maybeSingle();
+
+  if (!profile) return { email: null, name: null };
+
+  return {
+    email: profile.email,
+    name: [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Customer',
+  };
 }
 
 /* -----------------------------------------------------------
@@ -740,13 +798,13 @@ function ensureFeeCache() {
 }
 
 /**
- * NEW — only re-fetches the exchange rate when the currency pair
- * itself changes. The rate doesn't move between keystrokes on the
- * amount field, so there's no reason to hit the network on every
- * single one. This is what makes the rate row (and the
- * minimum-transfer message, which depends on it) feel instant
- * instead of laggy, and stops the flicker from overlapping
- * requests resolving out of order.
+ * Only re-fetches the exchange rate when the currency pair itself
+ * changes. The rate doesn't move between keystrokes on the amount
+ * field, so there's no reason to hit the network on every single
+ * one. This is what makes the rate row (and the minimum-transfer
+ * message, which depends on it) feel instant instead of laggy, and
+ * stops the flicker from overlapping requests resolving out of
+ * order.
  */
 async function getCachedRate(fromCurrency, toCurrency) {
   const pairKey = `${fromCurrency}_${toCurrency}`;
@@ -763,7 +821,7 @@ async function getCachedRate(fromCurrency, toCurrency) {
 
 async function recalcConversion() {
   ensureFeeCache();
-  const callId = ++rateCallToken; // NEW — staleness guard
+  const callId = ++rateCallToken; // staleness guard
 
   const fromAccount = currentFromAccount();
   const fromCurrency = fromAccount?.currency || 'USD';
@@ -783,14 +841,13 @@ async function recalcConversion() {
   const speed = $('input[name="speed"]:checked')?.value || 'standard';
   const fee = computeFee(sendAmount, speed);
 
-  const { rate, isFallback } = await getCachedRate(fromCurrency, toCurrency); // CHANGED — cached
-  const limits = await getLimitsInCurrency(fromCurrency); // CHANGED — cached
+  const { rate, isFallback } = await getCachedRate(fromCurrency, toCurrency); // cached
+  const limits = await getLimitsInCurrency(fromCurrency); // cached
 
-  // NEW — if a newer call started while these awaits were in
-  // flight (fast typing, quick currency switches), drop this pass
-  // instead of painting stale numbers over a newer result. This is
-  // what was causing the rate/limit note to visibly flip back and
-  // forth.
+  // If a newer call started while these awaits were in flight (fast
+  // typing, quick currency switches), drop this pass instead of
+  // painting stale numbers over a newer result. This is what was
+  // causing the rate/limit note to visibly flip back and forth.
   if (callId !== rateCallToken) return null;
 
   const receiveAmount = sendAmount * rate;
@@ -869,9 +926,9 @@ async function getEffectiveTransferLimits() {
 }
 
 /**
- * CHANGED — now caches the converted result per currency, so this
- * only does a network round-trip the first time a given currency
- * is seen in this wizard pass, not on every keystroke.
+ * Caches the converted result per currency, so this only does a
+ * network round-trip the first time a given currency is seen in
+ * this wizard pass, not on every keystroke.
  */
 async function getLimitsInCurrency(currency) {
   if (!effectiveLimits) effectiveLimits = await getEffectiveTransferLimits();
@@ -928,7 +985,7 @@ function buildAmountNote(info, limits) {
 }
 
 /**
- * CHANGED — recalcConversion() can now return null if a newer call
+ * recalcConversion() can now return null if a newer call
  * superseded it (see the staleness guard above). This is a
  * deliberate click, not rapid typing, so a second call is
  * essentially guaranteed to land — retry once rather than treat a
@@ -980,7 +1037,7 @@ async function populateReview() {
   const fee = computeFee(sendAmount, speed);
   const receiveAmount = Number($('#transfer-receive-amount').value) || 0;
   const toCurrency = $('#transfer-receive-currency').value;
-  const { rate } = await getCachedRate(fromAccount?.currency || 'USD', toCurrency); // CHANGED — cached
+  const { rate } = await getCachedRate(fromAccount?.currency || 'USD', toCurrency); // cached
 
   const scheduleText = `${speed === 'instant' ? 'Instant' : 'Standard'} · ${
     schedule === 'later' ? `Scheduled for ${formatScheduledDate()}` : 'Sending now'
@@ -1141,6 +1198,67 @@ async function handleConfirmSend() {
   $('#success-message').textContent = tx.status === 'Completed'
     ? `${currencySymbol(fromAccount.currency)}${formatAmount(sendAmount)} has been sent to ${recipient.name} and is already available to them.`
     : `${currencySymbol(fromAccount.currency)}${formatAmount(sendAmount)} is on its way to ${recipient.name}. Most transfers arrive within ${speedLabel}.`;
+
+  // -----------------------------------------------------------
+  // NEW — transaction email notifications, outgoing + incoming.
+  // Fire-and-forget: the transfer has already succeeded by this
+  // point, so a failed send is logged only, never surfaced as a
+  // blocking error — same pattern as admin-transactions.js's
+  // reversal email.
+  // -----------------------------------------------------------
+  const nowText = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+  // Outgoing — notify the sender (this device's own account).
+  if (myProfile?.email) {
+    const senderName = [myProfile.first_name, myProfile.last_name].filter(Boolean).join(' ') || 'Customer';
+    sendTransactionEmail('transfer_sent', {
+      to_email: myProfile.email,
+      customer_name: senderName,
+      email_title: 'Your transfer is on its way',
+      email_message: `This confirms your transfer to ${recipient.name || 'your recipient'} has been submitted.`,
+      preheader_text: `You sent ${currencySymbol(fromAccount.currency)}${formatAmount(sendAmount)} to ${recipient.name || 'your recipient'}.`,
+      amount_label: 'Amount sent',
+      amount: `${currencySymbol(fromAccount.currency)}${formatAmount(sendAmount)}`,
+      from_label: 'From',
+      from_value: `${fromAccount.currency} account`,
+      to_label: 'To',
+      to_value: recipient.name || 'Recipient',
+      reference: tx.transaction_reference,
+      transaction_type: 'Transfer',
+      date: nowText,
+    }).then((result) => {
+      if (!result.ok) console.error('[Meridian] transfer_sent email failed:', result.error);
+    });
+  } else {
+    console.warn('[Meridian] Transfer completed but no sender email on file — transfer_sent notification not sent.');
+  }
+
+  // Incoming — notify the receiver, but only when they're an
+  // internal Meridian account (an external beneficiary has no
+  // Meridian login/email to notify).
+  resolveReceiverContact(tx).then((contact) => {
+    if (!contact.email) return;
+    sendTransactionEmail('transfer_received', {
+      to_email: contact.email,
+      customer_name: contact.name,
+      email_title: "You\u2019ve received a transfer",
+      email_message: myProfile
+        ? `You've received a transfer from ${[myProfile.first_name, myProfile.last_name].filter(Boolean).join(' ') || 'a Meridian customer'}.`
+        : "You've received a transfer.",
+      preheader_text: `You received ${currencySymbol(toCurrency)}${formatAmount(receiveAmount)}.`,
+      amount_label: 'Amount received',
+      amount: `${currencySymbol(toCurrency)}${formatAmount(receiveAmount)}`,
+      from_label: 'From',
+      from_value: myProfile ? ([myProfile.first_name, myProfile.last_name].filter(Boolean).join(' ') || 'External sender') : 'External sender',
+      to_label: 'To',
+      to_value: `${toCurrency} account`,
+      reference: tx.transaction_reference,
+      transaction_type: 'Transfer',
+      date: nowText,
+    }).then((result) => {
+      if (!result.ok) console.error('[Meridian] transfer_received email failed:', result.error);
+    });
+  });
 
   lastTransferReceipt = {
     reference: tx.transaction_reference,
@@ -1338,9 +1456,9 @@ function resetWizard() {
   $('#beneficiary-search').value = '';
   $('#transfer-send-amount').value = '';
   effectiveLimits = null; // re-resolve limits on next step-2 validation
-  limitsByCurrency.clear(); // NEW
-  cachedRatePair = null;    // NEW
-  cachedRateResult = null;  // NEW
+  limitsByCurrency.clear();
+  cachedRatePair = null;
+  cachedRateResult = null;
   $('#recipient-saved-toggle').open = false;
   $('#auth-password-error').textContent = '';
   authFailedAttempts = 0;
@@ -1397,9 +1515,9 @@ function initPasswordToggle() {
   const user = await guardPage();
   if (!user) return;
 
-  // CHANGED — header now loads asynchronously via the shared
-  // app-navbar component, so header-dependent init waits for it,
-  // same pattern dashboard.js uses.
+  // Header now loads asynchronously via the shared app-navbar
+  // component, so header-dependent init waits for it, same
+  // pattern dashboard.js uses.
   waitForNavbar().then(() => {
     populateHeader();
     initUserMenu();
@@ -1465,16 +1583,18 @@ function initPasswordToggle() {
     }
   });
 
-  const [{ data: accs, error: accError }, { data: bens, error: benError }, limits] = await Promise.all([
+  const [{ data: accs, error: accError }, { data: bens, error: benError }, limits, { data: profile }] = await Promise.all([
     getMyAccounts(user.id),
     getMyBeneficiaries(user.id),
     getEffectiveTransferLimits(), // prefetch so the first keystroke on step 2 is instant
+    getMyProfile(), // NEW — captured once, used by transfer_sent emails
   ]);
   if (accError) showToast("Couldn't load your accounts. Please refresh.", 'error');
   if (benError) showToast("Couldn't load your beneficiaries. Please refresh.", 'error');
   accounts = accs || [];
   beneficiaries = bens || [];
   effectiveLimits = limits;
+  myProfile = profile || null; // NEW
 
   applyQueryParams();
   renderFromAccountStrip();
